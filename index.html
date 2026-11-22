@@ -2335,7 +2335,7 @@ async function drawHistory(body, c) {
  *     เบิกแล้วยังไม่บันทึกยอดคืน → ขึ้นสีแดง
  * ===================================================================== */
 function VIEWS_kits(el, kind) {
-  kind = kind === 'supply' ? 'supply' : 'kit';
+  kind = 'kit'; // หน้าเบิก/คืนอุปกรณ์ถูกเอาออก เหลือเฉพาะ Test kit (ข้อมูลเดิมในชีต SupplyLog ยังอยู่)
   const sheet = kind === 'kit' ? 'TestKitLog' : 'SupplyLog';
   const items = () => kind === 'kit' ? S.kits : S.supplies;
   const nm = kind === 'kit' ? 'test kit' : 'อุปกรณ์';
@@ -2359,7 +2359,6 @@ function VIEWS_kits(el, kind) {
     el.innerHTML = `
       <div class="row" style="justify-content:space-between;margin-bottom:8px"><h1 style="margin:0">เบิก / คืน ${kind === 'kit' ? 'Test kit' : 'อุปกรณ์เก็บตัวอย่าง'}</h1>
         <button class="btn pri" id="takeBtn">＋ เบิก ${esc(nm)}</button></div>
-      <nav class="tabs"><a href="#/kits/kit" class="${kind === 'kit' ? 'act' : ''}">🧪 Test kit</a><a href="#/kits/supply" class="${kind === 'supply' ? 'act' : ''}">🧰 อุปกรณ์ (หลอด สไลด์ syringe …)</a></nav>
       ${open.length ? `<div class="card" style="border-color:#f0a8b3"><h2 style="border-left-color:var(--err);color:var(--err)">⚠ เบิกแล้วยังไม่บันทึกยอดคืน (${open.length})</h2>
         <div class="tblwrap"><table class="tbl"><thead><tr><th>วัน</th><th>หน่วย</th><th>รายการ</th><th class="n">เบิก</th><th>ผู้เบิก</th><th></th></tr></thead><tbody>
         ${open.map(r => `<tr class="${today && Number(r.campDay) < today ? 'late' : ''}"><td>Day ${esc(r.campDay)}${Number(r.campDay) < (today || 0) ? ' <span class="badge st-revise">ค้างข้ามวัน</span>' : ''}</td><td>${esc(r.unit)}</td><td><b>${esc(r.item)}</b></td>
@@ -2866,7 +2865,7 @@ function VIEWS_reports(el, tab) {
       body = `<div class="card"><h2>ข้อมูลดิบ (1 แถว = 1 ตัว / 1 รายการ) — ตามตัวกรองด้านบน</h2>
           <div class="row">${btn('cases', 'ทะเบียนตัวอย่าง (Cases)')}${btn('cases_deid', 'ทะเบียนตัวอย่าง — ตัดข้อมูลระบุตัวตน')}
             ${btn('sa', 'ผลแลปสัตว์เล็ก (SA_Results)')}${btn('la', 'ผลแลปสัตว์ใหญ่ (LA_Results)')}${btn('cattle', 'Blood parasite โค')}</div>
-          <div class="row" style="margin-top:8px">${btn('kitlog', 'เบิก/คืน Test kit')}${btn('supply', 'เบิก/คืน อุปกรณ์')}${btn('booking', 'จองห้องแลป')}</div>
+          <div class="row" style="margin-top:8px">${btn('kitlog', 'เบิก/คืน Test kit')}${btn('booking', 'จองห้องแลป')}</div>
           <p class="small muted">ไฟล์ CSV แบบ UTF-8 (BOM) เปิดใน Excel ภาษาไทยได้ · ผลแลปมีคอลัมน์ 0/1 แยกรายเชื้อ (fec_*, bp_*) สำหรับ SPSS · "ตัดข้อมูลระบุตัวตน" = ไม่มีชื่อเจ้าของ บ้านเลขที่ พิกัด</p></div>
         <div class="card"><h2>สรุปสำหรับรายงาน (ส่วนกลาง / กรมปศุสัตว์)</h2>
           <div class="row">${btn('sum_fecal', 'ความชุกพยาธิทางเดินอาหาร')}${btn('sum_bp', 'ความชุกพยาธิในเม็ดเลือด (เคส)')}${btn('sum_kit', 'Test kit % positive')}${btn('sum_count', 'จำนวนตัวอย่าง วัน × หน่วย')}</div>
@@ -2964,7 +2963,7 @@ function VIEWS_settings(el, tab) {
       const tbl = (cat, title) => `<div class="card"><h2>${title}</h2><table class="tbl"><thead><tr><th>ชื่อรายการ</th><th class="n">จำนวนตั้งต้นในตู้</th><th></th></tr></thead><tbody>
         ${idx(cat).map(([r, i]) => `<tr><td>${inp(i, 'key')}</td><td class="n">${inp(i, 'value', 'inputmode="numeric" style="width:100px;text-align:right"')}</td><td>${del(i)}</td></tr>`).join('')}</tbody></table>
         <div class="row" style="margin-top:8px">${addBtn(cat, 'เพิ่มรายการ')}</div></div>`;
-      body = tbl('kit', 'Test kit') + tbl('supply', 'อุปกรณ์เก็บตัวอย่าง');
+      body = tbl('kit', 'Test kit');
     } else if (tab === 'lists') {
       const names = [...new Set(idx('list').map(([r]) => r.key))];
       body = names.map(n => `<div class="card"><h2 class="mono" style="font-size:13px">${esc(n)}</h2><div class="chips">
@@ -2987,7 +2986,7 @@ function VIEWS_settings(el, tab) {
     el.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:8px"><h1 style="margin:0">ตั้งค่า (Admin)</h1>
         <div class="row"><button class="btn" id="setReset" ${dirty ? '' : 'disabled'}>ยกเลิกที่แก้</button><button class="btn pri" id="setSave" ${dirty ? '' : 'disabled'}>💾 บันทึกการตั้งค่า</button></div></div>
       ${dirty ? '<div class="alert warn small">มีการแก้ไขที่ยังไม่ได้บันทึก — ทุกเครื่องจะเห็นค่าใหม่ภายใน ~30 วินาทีหลังบันทึก</div>' : ''}
-      <nav class="tabs">${[['config', 'ค่าทั่วไป'], ['days', 'วันค่าย / หน่วย'], ['kits', 'Test kit / อุปกรณ์'], ['lists', 'ตัวเลือกในฟอร์ม'], ['members', 'รายชื่อนิสิต'], ['danger', '⚠ ล้างข้อมูล']]
+      <nav class="tabs">${[['config', 'ค่าทั่วไป'], ['days', 'วันค่าย / หน่วย'], ['kits', 'Test kit'], ['lists', 'ตัวเลือกในฟอร์ม'], ['members', 'รายชื่อนิสิต'], ['danger', '⚠ ล้างข้อมูล']]
         .map(([k, t]) => `<a href="#/settings/${k}" class="${k === tab ? 'act' : ''}">${t}</a>`).join('')}</nav>${body}`;
     $$('[data-i]', el).forEach(x => x.oninput = x.onchange = () => { W[Number(x.dataset.i)][x.dataset.f] = x.value; keep(); });
     $$('[data-del]', el).forEach(b => b.onclick = () => { W.splice(Number(b.dataset.del), 1); keep(); draw(); });
