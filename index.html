@@ -226,7 +226,7 @@ table.tbl td.n,table.tbl th.n{text-align:right}
 .login .box{background:#fff;border-radius:8px;padding:22px;width:min(440px,100%);box-shadow:0 20px 50px rgba(0,0,0,.25);border-top:5px solid var(--pink)}
 .login-hd{display:flex;gap:10px;align-items:center;margin-bottom:14px}
 .login-hd .mark{font-size:14px;padding:4px 8px}
-.qfull{color:#b91c1c;font-weight:700}.tbl tr.grp td{background:rgba(100,116,139,.13)}
+.qfull{color:#b91c1c;font-weight:700}.contact{margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(100,116,139,.06);line-height:1.7}.contact a{font-weight:600}.tbl tr.grp td{background:rgba(100,116,139,.13)}
 .kpilist{list-style:none;padding:0;margin:0}.kpilist li{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px dashed rgba(100,116,139,.25)}.kpilist .rk{width:22px;color:#64748b;flex:none}.kpilist .v{margin-left:auto;white-space:nowrap}.kpiday{margin:10px 0 14px}.kpiday h3{margin:0 0 4px}
 .pies{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin:6px 0 18px}.pies svg{flex:none}.pielg{list-style:none;padding:0;margin:0;flex:1;min-width:230px}.pielg li{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px dashed rgba(100,116,139,.25)}.pielg .dot{width:12px;height:12px;border-radius:3px;flex:none;align-self:center}.pielg .v{margin-left:auto;white-space:nowrap}.minipies{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin:6px 0 18px}.minipie{text-align:center}.minipie .t{font-size:13px;font-weight:600;margin-top:4px}.amtrow{display:flex;gap:8px;align-items:center;margin-top:6px}.amtrow label{min-width:96px;font-weight:600;margin:0}.amtrow input{flex:1;min-width:0}
 .login-logo{display:block;width:min(240px,75%);height:auto;margin:0 auto 12px}
@@ -948,6 +948,7 @@ function renderShell() {
     ${navItems.map(n => n.sec ? `<div class="sec">${esc(n.sec)}</div>` : `<a href="#/${n.r}" data-r="${n.r}"><span class="ic">${n.ic}</span>${esc(n.t)}</a>`).join('')}
     <div class="sec">บัญชี</div>
     <a href="#" id="helpLink"><span class="ic">📖</span>คู่มือการใช้งาน</a>
+    <a href="#" id="sosLink"><span class="ic">📞</span>ติดต่อฉุกเฉิน</a>
     <a href="#" id="logoutLink"><span class="ic">↩</span>ออกจากระบบ / เปลี่ยนผู้ใช้</a>
     <div class="small muted" style="padding:8px 12px">${esc(s.user)} · ${s.group ? 'กลุ่ม ' + esc(s.group) : 'ไม่สังกัดกลุ่ม'} · ${ROLE_TH[s.role]}</div>
   </nav>
@@ -966,6 +967,7 @@ function renderShell() {
   $('#side').addEventListener('click', e => { if (e.target.closest('a')) openMenu(false); });
   $('#connPill').onclick = openQueuePanel;
   $('#helpBtn').onclick = $('#helpLink').onclick = e => { e.preventDefault(); showGuide(); };
+  $('#sosLink').onclick = e => { e.preventDefault(); modal(`<h2>📞 ติดต่อฉุกเฉิน</h2>${CONTACT_HTML}<div class="acts"><button class="btn pri" data-v="null">ปิด</button></div>`); };
   $('#logoutLink').onclick = async e => {
     e.preventDefault();
     const n = S.queue.length;
@@ -1011,6 +1013,11 @@ const deviceInfo = () => {
     ' · ' + (window.innerWidth < 900 ? 'มือถือ' : 'จอใหญ่');
 };
 
+/** ช่องทางติดต่อกรณีฉุกเฉิน (หน้าเข้าใช้งาน + เมนู) */
+const CONTACT_HTML = `<div class="contact"><div class="small" style="font-weight:600;margin-bottom:4px">📞 ติดต่อกรณีฉุกเฉิน / ระบบมีปัญหา</div>
+  <div class="small">บัว — โทร <a href="tel:0903190901">090-319-0901</a> · LINE <a href="https://line.me/ti/p/~auangalinbaibua" target="_blank" rel="noopener">auangalinbaibua</a></div>
+  <div class="small">ฮัก (หัวหน้าฝ่าย Lab-path) — โทร <a href="tel:0873455445">087-345-5445</a></div>
+  <div class="small muted" style="margin-top:4px">* โปรดติดต่อเฉพาะกรณีฉุกเฉินเท่านั้น</div></div>`;
 function renderLogin(msg) {
   const last = store.get('lastLogin', {});
   const savedPin = store.get('pin', '');
@@ -1038,6 +1045,7 @@ function renderLogin(msg) {
       <button class="btn block" type="button" id="lgBack" style="margin-top:8px">ย้อนกลับ</button>
     </form>
     <p class="small" style="text-align:center;margin:14px 0 0"><a href="manual.html" target="_blank" rel="noopener">📖 คู่มือการใช้งาน</a></p>
+    ${CONTACT_HTML}
   </div></div>`;
   let pending = null, picked = null;
   /** หาคนในรายชื่อจากสิ่งที่พิมพ์: ชื่อเต็มตรง → ชื่อต้นตรง → ชื่อที่ขึ้นต้นด้วยที่พิมพ์ (แนะนำ) */
@@ -1330,8 +1338,8 @@ function bindCaseForm(root, getState, setState) {
   const qBox = $('#quotaBox', root);
   if (qBox) root.addEventListener('change', () => setTimeout(() => { // wait for single-select chips to settle
     if (!qBox.isConnected) return;
-    const st = getState(), v = readForm(root, [FIELDS.head[0], FIELDS.head[1]]);
-    qBox.innerHTML = quotaHTML(v.campDay, v.unit, st.id, st.animalGroup);
+    const st = getState(), v = readForm(root, [FIELDS.head[0], { k:'group', type:'group' }, sampleFields()[0]]);
+    qBox.innerHTML = quotaHTML(v.campDay, v.group || (isStaff() ? '' : S.session.group), st.id, st.animalGroup, splitMulti(v.sampleTypes));
   }, 0));
   const gps = $('#gpsBtn', root);
   if (gps) gps.onclick = () => {
@@ -1454,6 +1462,7 @@ const TESTS = [
   { k:'blood', label:'Blood (CBC)', short:'Blood', la:true, set:'blood_setting' },
   { k:'bp', label:'Blood parasite', short:'Blood parasite', la:true, set:'bp_setting' },
   { k:'feces', label:'Fecal exam', short:'Fecal', la:true, set:'fec_setting' },
+  { k:'chem', label:'Blood chemistry', short:'Chemistry', la:true, set:'chem_setting' },
   { k:'cyto', label:'Cytology', short:'Cytology', la:true, set:'cyto_setting' },
   { k:'urine', label:'Urinalysis', short:'Urine', set:'ur_setting' },
   { k:'kit', label:'Test kit', short:'Test kit', set:'kit_setting' },
@@ -1484,8 +1493,14 @@ const SECTIONS = {
       { k:'poikilocyte', label:'Poikilocyte', type:'chips', list:'poikilocyte' }, { k:'poikilocyteType', label:'ชนิด Poikilocyte', type:'text' },
       { k:'platelet', label:'Platelet (×10³/µL)', type:'num', ref:'plt' }, { k:'retic', label:'Reticulocyte count', type:'text' },
       { k:'sat', label:'Saline agglutination (SAT)', type:'chips', opts:['Positive','Negative'] },
-      { k:'bloodChem', label:'Significant blood chemistry (BUN, Crea, Alb …)', type:'text', w:'full' },
-      { k:'cbcInterp', label:'CBC interpretation', type:'area', w:'full' }, { k:'chemInterp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
+      { k:'cbcInterp', label:'CBC interpretation', type:'area', w:'full' } ],
+    chem: [ { k:'chem_setting', ...FL },
+      { k:'chem_bun', label:'BUN (mg/dL)', type:'num', ref:'bun' }, { k:'chem_crea', label:'Creatinine (mg/dL)', type:'num', ref:'crea' },
+      { k:'chem_alt', label:'ALT (U/L)', type:'num', ref:'alt' }, { k:'chem_alp', label:'ALP (U/L)', type:'num', ref:'alp' },
+      { k:'chem_tp', label:'Total protein (g/dL)', type:'num', ref:'tp' }, { k:'chem_alb', label:'Albumin (g/dL)', type:'num', ref:'alb' },
+      { k:'chem_glob', label:'Globulin (g/dL)', type:'num', ref:'glob' }, { k:'chem_glu', label:'Glucose (mg/dL)', type:'num', ref:'glu' },
+      { k:'bloodChem', label:'ค่าอื่น ๆ (เช่น Phosphorus, Bilirubin, Cholesterol)', type:'text', w:'full' },
+      { k:'chemInterp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
     bp: [ { k:'bp_setting', ...FL }, { k:'bp_method', label:'Method', type:'multi', list:'bp_method_SA', w:'full' },
       { k:'bp_result', label:'ผลที่พบ', type:'multi', list:'bp_result_SA', w:'full', pos:true }, { k:'bp_note', label:'หมายเหตุ / อื่น ๆ ระบุ', type:'area', w:'full' } ],
     feces: [ { k:'fec_setting', ...FL }, { k:'fec_method', label:'Method', type:'multi', list:'fec_method', w:'full' },
@@ -1523,6 +1538,13 @@ const SECTIONS = {
       { k:'rbc', label:'RBC (×10⁶/µL)', type:'num', ref:'rbc' }, { k:'wbc', label:'WBC (×10³/µL)', type:'num', ref:'wbc' },
       ...DIFF, { k:'poikilocyte', label:'Poikilocytes', type:'text' }, { k:'platelet', label:'Platelet (×10³/µL)', type:'num', ref:'plt' },
       { k:'blood_interp', label:'Interpretation', type:'area', w:'full' } ],
+    chem: [ { k:'chem_setting', ...FL },
+      { k:'chem_bun', label:'BUN (mg/dL)', type:'num', ref:'bun' }, { k:'chem_crea', label:'Creatinine (mg/dL)', type:'num', ref:'crea' },
+      { k:'chem_ast', label:'AST (U/L)', type:'num', ref:'ast' }, { k:'chem_ggt', label:'GGT (U/L)', type:'num', ref:'ggt' },
+      { k:'chem_tp', label:'Total protein (g/dL)', type:'num', ref:'tp' }, { k:'chem_alb', label:'Albumin (g/dL)', type:'num', ref:'alb' },
+      { k:'chem_glob', label:'Globulin (g/dL)', type:'num', ref:'glob' }, { k:'chem_glu', label:'Glucose (mg/dL)', type:'num', ref:'glu' },
+      { k:'chem_other', label:'ค่าอื่น ๆ (เช่น Ca, P, Mg, Bilirubin)', type:'text', w:'full' },
+      { k:'chem_interp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
     bp: [ { k:'bp_setting', ...FL }, { k:'bp_method', label:'Methods', type:'multi', list:'bp_method_LA', w:'full' },
       { k:'bp_result', label:'ผลที่พบ', type:'multi', list:'bp_result_LA', w:'full', pos:true }, { k:'bp_note', label:'หมายเหตุ', type:'area', w:'full' } ],
     feces: [ { k:'fec_setting', ...FL }, { k:'fec_method', label:'Method', type:'multi', list:'fec_method', w:'full' },
@@ -1538,9 +1560,12 @@ const secFields = (g, k) => (SECTIONS[g === 'LA' ? 'LA' : 'SA'][k] || []);
 
 /** ค่าอ้างอิงโดยประมาณ (ใช้เตือน ↑↓ สีเหลือง ไม่บล็อกการบันทึก) — ปรับตามตำราที่ฝ่ายใช้ได้ */
 const REF = {
-  'สุนัข': { hct:[37,55], tp:[5.4,7.5], rbc:[5.5,8.5], wbc:[6,17], plt:[200,500], usg:[1.015,1.045] },
-  'แมว':  { hct:[30,45], tp:[6.0,8.0], rbc:[5,10], wbc:[5.5,19.5], plt:[300,800], usg:[1.035,1.060] },
-  'โค':   { hct:[24,46], tp:[7.0,8.5], rbc:[5,10], wbc:[4,12], plt:[100,800] }
+  'สุนัข': { hct:[37,55], tp:[5.4,7.5], rbc:[5.5,8.5], wbc:[6,17], plt:[200,500], usg:[1.015,1.045],
+    bun:[7,27], crea:[0.5,1.8], alt:[10,100], alp:[20,150], alb:[2.5,4.0], glob:[2.0,4.5], glu:[70,140] },
+  'แมว':  { hct:[30,45], tp:[6.0,8.0], rbc:[5,10], wbc:[5.5,19.5], plt:[300,800], usg:[1.035,1.060],
+    bun:[16,36], crea:[0.8,2.4], alt:[12,130], alp:[14,111], alb:[2.5,3.9], glob:[2.5,5.0], glu:[70,150] },
+  'โค':   { hct:[24,46], tp:[7.0,8.5], rbc:[5,10], wbc:[4,12], plt:[100,800],
+    bun:[6,27], crea:[1.0,2.0], ast:[60,125], ggt:[15,40], alb:[2.7,3.8], glob:[3.0,4.8], glu:[45,75] }
 };
 const refFor = c => REF[c.species] || (c.animalGroup === 'LA' ? REF['โค'] : null);
 const HARD = { hct:[0,80], tp:[0,15], ur_usg:[1.000,1.080] }; // เกินช่วงนี้ = เป็นไปไม่ได้ → ห้ามบันทึก
@@ -1580,6 +1605,9 @@ function summarize(g, sec, row, c) {
   switch (sec) {
     case 'blood': return [num('hct', 'Hct', '%', 'hct'), num('tp', 'TP', '', 'tp'), num('wbc', 'WBC', '', 'wbc'), num('platelet', 'PLT', '', 'plt'),
       filled(r.sat) ? 'SAT ' + r.sat : '', first(r.cbcInterp || r.blood_interp)].filter(Boolean).join(' · ');
+    case 'chem': return [num('chem_bun', 'BUN', '', 'bun'), num('chem_crea', 'Crea', '', 'crea'), num('chem_alt', 'ALT', '', 'alt'), num('chem_ast', 'AST', '', 'ast'),
+      num('chem_alp', 'ALP', '', 'alp'), num('chem_ggt', 'GGT', '', 'ggt'), num('chem_alb', 'Alb', '', 'alb'), num('chem_glu', 'Glu', '', 'glu'),
+      first(r.chemInterp || r.chem_interp)].filter(Boolean).join(' · ');
     case 'bp': return [r.bp_result || '(ยังไม่ระบุผล)', filled(r.bp_method) ? `<span class="muted">· ${esc(r.bp_method)}</span>` : ''].join(' ');
     case 'feces': return [r.fec_result || '(ยังไม่ระบุผล)', filled(r.fec_epg) ? 'EPG ' + r.fec_epg : '', filled(r.fec_method) ? `<span class="muted">· ${esc(r.fec_method)}</span>` : ''].filter(Boolean).join(' · ');
     case 'cyto': return [r.cyto_location, first(r.cyto_results)].filter(Boolean).join(': ');
@@ -1924,24 +1952,28 @@ function amountsFld(rec, ro) {
   const ts = splitMulti(rec.sampleTypes);
   return `<div class="fld full" data-k="sampleAmount"><div class="lab">ปริมาณตัวอย่าง — กรอกของแต่ละชนิดที่เก็บ<span class="req">*</span></div><div id="amtBox">${amountsInner(ts, parseAmounts(rec.sampleAmount, ts), ro)}</div></div>`;
 }
-/** โควตาสัตว์เล็ก: เลือด / อุจจาระ อย่างละไม่เกิน N ตัวอย่าง ต่อหน่วย ต่อวัน (Settings: saMaxBlood, saMaxFecal · เริ่มต้น 10 · 0 = ไม่จำกัด) */
-const SA_LIMITS = { 'Blood': ['saMaxBlood', 'เลือด'], 'Fecal': ['saMaxFecal', 'อุจจาระ'] };
-function saQuota(day, unit, selfId) {
-  return Object.keys(SA_LIMITS).map(t => {
-    const raw = S.cfg[SA_LIMITS[t][0]], max = raw === '' || raw == null ? 10 : Number(raw);
-    const n = rows('Cases').filter(c => c.id !== selfId && c.animalGroup !== 'LA' && String(c.campDay) === String(day) && c.unit === unit && splitMulti(c.sampleTypes).includes(t)).length;
-    return { t, label: SA_LIMITS[t][1], n, max };
-  }).filter(q => q.max > 0);
+/** โควตา: แต่ละกลุ่มส่งได้ไม่เกิน N ตัวอย่าง ต่อชนิดตัวอย่าง ต่อวัน (Settings: sampleMaxPerGroup · เริ่มต้น 10 · 0 = ไม่จำกัด) · เลือดโคไม่จำกัด */
+const quotaMax = () => { const raw = S.cfg.sampleMaxPerGroup; return raw === '' || raw == null ? 10 : Number(raw); };
+const quotaExempt = (ag, t) => ag === 'LA' && t === 'Blood';
+function groupQuota(day, group, selfId, types) {
+  const max = quotaMax();
+  if (!day || !group || !(max > 0)) return [];
+  const L = rows('Cases').filter(c => c.id !== selfId && String(c.campDay) === String(day) && String(c.group) === String(group));
+  return types.map(t => ({ t, max, n: L.filter(c => splitMulti(c.sampleTypes).includes(t) && !quotaExempt(c.animalGroup, t)).length }));
 }
-function quotaHTML(day, unit, selfId, g) {
-  if (!day || !unit || g === 'LA' || unitInfo(unit).group === 'LA') return '';
-  const qs = saQuota(day, unit, selfId);
-  return qs.length ? `<div class="small muted" style="margin-top:6px">โควตาสัตว์เล็ก หน่วย ${esc(unit)} Day ${esc(day)} (รับแล้ว/สูงสุด): ${qs.map(q => `<span class="${q.n >= q.max ? 'qfull' : ''}">${q.label} ${q.n}/${q.max}${q.n >= q.max ? ' — เต็มแล้ว' : ''}</span>`).join(' · ')}</div>` : '';
+function quotaHTML(day, group, selfId, g, picked) {
+  if (!day || !group || !(quotaMax() > 0)) return '';
+  const used = new Set(rows('Cases').filter(c => c.id !== selfId && String(c.campDay) === String(day) && String(c.group) === String(group)).flatMap(c => splitMulti(c.sampleTypes)));
+  const types = [...new Set([...(picked || []), ...used])].filter(t => !quotaExempt(g, t));
+  const qs = groupQuota(day, group, selfId, types);
+  const note = g === 'LA' ? ' · เลือดโค (Blood parasite) ไม่จำกัด' : '';
+  return `<div class="small muted" style="margin-top:6px">โควตากลุ่ม ${esc(group)} Day ${esc(day)} (ส่งแล้ว/สูงสุด ต่อชนิด): ${qs.length ? qs.map(q => `<span class="${q.n >= q.max ? 'qfull' : ''}">${esc(q.t)} ${q.n}/${q.max}${q.n >= q.max ? ' — เต็มแล้ว' : ''}</span>`).join(' · ') : 'ยังไม่มีตัวอย่าง'}${note}</div>`;
 }
 function quotaBlock(vals, selfId) {
-  if (vals.animalGroup === 'LA' || unitInfo(vals.unit).group === 'LA') return '';
-  const ts = splitMulti(vals.sampleTypes), full = saQuota(vals.campDay, vals.unit, selfId).filter(q => ts.includes(q.t) && q.n >= q.max);
-  return full.length ? `ตัวอย่าง${full.map(q => q.label).join(' และ ')}ของหน่วย ${vals.unit} Day ${vals.campDay} เต็มแล้ว (${full.map(q => q.n + '/' + q.max).join(', ')}) — รับเพิ่มไม่ได้` : '';
+  const g = vals.animalGroup === 'LA' ? 'LA' : 'SA';
+  const ts = splitMulti(vals.sampleTypes).filter(t => !quotaExempt(g, t));
+  const full = groupQuota(vals.campDay, vals.group, selfId, ts).filter(q => q.n >= q.max);
+  return full.length ? `กลุ่ม ${vals.group} ส่งตัวอย่าง ${full.map(q => q.t + ' (' + q.n + '/' + q.max + ')').join(', ')} ของ Day ${vals.campDay} ครบแล้ว — รับเพิ่มไม่ได้` : '';
 }
 function caseFields(group) {
   const g = group === 'LA' ? 'LA' : 'SA';
@@ -1965,7 +1997,7 @@ function caseFormHTML(rec, ro) {
       <h3 style="margin:14px 0 6px">Signalment</h3>${formHTML(signalFields(g), rec, ro)}
       <h3 style="margin:14px 0 6px">ตัวอย่างที่เก็บ / ส่งตรวจ</h3>
       <div class="grid">${fieldHTML(sampleFields()[0], rec.sampleTypes, ro)}${amountsFld(rec, ro)}</div>
-      <div id="quotaBox">${quotaHTML(rec.campDay, rec.unit, rec.id, g)}</div>
+      <div id="quotaBox">${quotaHTML(rec.campDay, rec.group || (S.session && S.session.group), rec.id, g, splitMulti(rec.sampleTypes))}</div>
       <div style="height:8px"></div>${formHTML([testsField(g), { k:'remarks', label:'หมายเหตุ', type:'area', w:'full' }], rec, ro)}
     </fieldset></div>
     <details class="sec"><summary>ข้อมูลเพิ่มเติม (ไม่บังคับ) — สายพันธุ์ ประวัติ ที่อยู่</summary><div class="body"><fieldset ${ro ? 'disabled' : ''}>
