@@ -1293,7 +1293,7 @@ function VIEWS_dashboard(el) {
  * ===================================================================== */
 function VIEWS_search(el, qs) {
   const p = Object.fromEntries(new URLSearchParams(qs || ''));
-  const st = Object.assign({ q: '', day: '', unit: '', status: '', grp: '', st: '' }, p);
+  const st = Object.assign({ q: '', day: '', gno: '', unit: '', status: '', grp: '', st: '' }, p);
   el.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:baseline"><h1 style="margin-bottom:6px">ภาพรวม ณ ตอนนี้</h1><span class="small muted" id="sSync"></span></div>
     <div id="sStats"></div>
@@ -1303,6 +1303,7 @@ function VIEWS_search(el, qs) {
         <input id="sq" type="search" value="${esc(st.q)}" placeholder="พิมพ์อย่างน้อย 1 ตัวอักษร" autocomplete="off"></div>
       <div class="grid">
         <div class="fld"><label for="sday">วัน</label><select id="sday"><option value="">ทุกวัน</option>${campDays().map(d => `<option value="${d}" ${String(d) === st.day ? 'selected' : ''}>Day ${d}</option>`).join('')}</select></div>
+        <div class="fld"><label for="sgno">กลุ่ม</label><select id="sgno"><option value="">ทุกกลุ่ม</option>${groupList().map(g => `<option value="${g}" ${g === String(st.gno) ? 'selected' : ''}>กลุ่ม ${g}</option>`).join('')}</select></div>
         <div class="fld"><label for="sunit">หน่วย</label><select id="sunit"><option value="">ทุกหน่วย</option>${S.units.map(u => `<option value="${esc(u.code)}" ${u.code === st.unit ? 'selected' : ''}>${esc(u.code)} — ${esc(u.name)}</option>`).join('')}</select></div>
         <div class="fld"><label for="sstatus">สถานะ</label><select id="sstatus"><option value="">ทุกสถานะ</option>${ST_ORDER.map(s => `<option ${s === st.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="fld"><label for="sgrp">ชนิดสัตว์</label><select id="sgrp"><option value="">ทั้งหมด</option><option value="SA" ${st.grp === 'SA' ? 'selected' : ''}>สัตว์เล็ก</option><option value="LA" ${st.grp === 'LA' ? 'selected' : ''}>สัตว์ใหญ่</option>
@@ -1334,15 +1335,18 @@ function VIEWS_search(el, qs) {
   };
   const run = () => {
     const q = $('#sq').value.trim().toLowerCase();
-    const f = { day: $('#sday').value, unit: $('#sunit').value, status: $('#sstatus').value, grp: $('#sgrp').value, st: $('#sst').value };
+    const f = { day: $('#sday').value, gno: $('#sgno').value, unit: $('#sunit').value, status: $('#sstatus').value, grp: $('#sgrp').value, st: $('#sst').value };
     let list = rows('Cases').filter(c =>
-      (!f.day || String(c.campDay) === f.day) && (!f.unit || c.unit === f.unit) &&
+      (!f.day || String(c.campDay) === f.day) && (!f.gno || String(c.group || '') === f.gno) && (!f.unit || c.unit === f.unit) &&
       (!f.status || (c.status || ST.PENDING) === f.status) &&
       (!f.grp || (f.grp.startsWith('sp:') ? c.species === f.grp.slice(3) : c.animalGroup === f.grp)) &&
       (!f.st || splitMulti(c.sampleTypes).includes(f.st)) &&
       (!q || [c.sampleNo, c.animalName, c.ownerName, c.farmName, c.animalId].some(v => String(v || '').toLowerCase().includes(q))));
     list.sort((a, b) => String(b.sampleNo || '~').localeCompare(String(a.sampleNo || '~'), 'th', { numeric: true }));
-    $('#sres').innerHTML = `<p class="muted">${list.length} เคส${list.length > 200 ? ' (แสดง 200 รายการแรก)' : ''}</p>
+    // สรุปจำนวนตัวอย่างแต่ละชนิดของเคสที่กรองได้ (เช่น เลือกวัน + กลุ่ม → เห็นว่ากลุ่มนั้นเก็บอะไรไปบ้าง)
+    const byType = {}; list.forEach(c => splitMulti(c.sampleTypes).forEach(t => { byType[t] = (byType[t] || 0) + 1; }));
+    const typeSum = Object.keys(byType).sort((a, b) => byType[b] - byType[a]).map(t => `<span class="pill off" style="cursor:default">${esc(t)} ${byType[t]}</span>`).join(' ');
+    $('#sres').innerHTML = `<p class="muted">${list.length} เคส${list.length > 200 ? ' (แสดง 200 รายการแรก)' : ''}${typeSum ? ' · ตัวอย่าง: ' + typeSum : ''}</p>
       <div class="clist">${list.slice(0, 200).map(caseItem).join('') || '<div class="empty card">ไม่พบเคสที่ตรงเงื่อนไข</div>'}</div>`;
   };
   let t; $('#sq').oninput = () => { clearTimeout(t); t = setTimeout(run, 150); };
