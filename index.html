@@ -2951,7 +2951,7 @@ function VIEWS_settings(el, tab) {
     if (tab === 'config') {
       body = `<div class="card"><h2>ค่าทั่วไป</h2><div class="tblwrap"><table class="tbl"><thead><tr><th>ตั้งค่า</th><th>ค่า</th></tr></thead><tbody>
         ${idx('config').map(([r, i]) => `<tr><td>${esc(r.label || r.key)}<div class="small muted mono">${esc(r.key)}</div></td><td>${inp(i, 'value')}</td></tr>`).join('')}</tbody></table></div>
-        <p class="small muted">bookingSlots = ช่วงเวลาจองห้อง คั่นด้วย , · bookingQuota = จำนวนกลุ่มต่อช่อง · sampleNoFormat ใช้ {day} {unit} {date} {seq:3}</p></div>`;
+        <p class="small muted">bookingSlots = ช่วงเวลาจองห้อง คั่นด้วย , · bookingQuota = จำนวนกลุ่มต่อช่อง · sampleNoFormat ใช้ {day} {unit} {group:2} {date} {seq:3} (เช่น D{day}-{unit}-{group:2}-{seq:3} → D1-SA-12-001)</p></div>`;
     } else if (tab === 'days') {
       body = `<div class="card"><h2>วันค่าย</h2><table class="tbl"><thead><tr><th>Day</th><th>ชื่อ</th><th>วันที่ (ค.ศ.)</th></tr></thead><tbody>
           ${idx('campDate').map(([r, i]) => `<tr><td class="mono">${esc(r.key)}</td><td>${inp(i, 'label')}</td><td>${inp(i, 'value', 'type="date"')}</td></tr>`).join('')}</tbody></table>
