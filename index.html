@@ -226,7 +226,7 @@ table.tbl td.n,table.tbl th.n{text-align:right}
 .login .box{background:#fff;border-radius:8px;padding:22px;width:min(440px,100%);box-shadow:0 20px 50px rgba(0,0,0,.25);border-top:5px solid var(--pink)}
 .login-hd{display:flex;gap:10px;align-items:center;margin-bottom:14px}
 .login-hd .mark{font-size:14px;padding:4px 8px}
-.qfull{color:#b91c1c;font-weight:700}.contact{margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(100,116,139,.06);line-height:1.7}.contact a{font-weight:600}.tbl tr.grp td{background:rgba(100,116,139,.13)}
+.qfull{color:#b91c1c;font-weight:700}.photos{display:flex;flex-wrap:wrap;gap:8px}.photos .ph{position:relative}.photos img{width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block;background:#f1f5f9}.photos .phdel{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(15,23,42,.7);color:#fff;cursor:pointer}.contact{margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);background:rgba(100,116,139,.06);line-height:1.7}.contact a{font-weight:600}.tbl tr.grp td{background:rgba(100,116,139,.13)}
 .kpilist{list-style:none;padding:0;margin:0}.kpilist li{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px dashed rgba(100,116,139,.25)}.kpilist .rk{width:22px;color:#64748b;flex:none}.kpilist .v{margin-left:auto;white-space:nowrap}.kpiday{margin:10px 0 14px}.kpiday h3{margin:0 0 4px}
 .pies{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin:6px 0 18px}.pies svg{flex:none}.pielg{list-style:none;padding:0;margin:0;flex:1;min-width:230px}.pielg li{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px dashed rgba(100,116,139,.25)}.pielg .dot{width:12px;height:12px;border-radius:3px;flex:none;align-self:center}.pielg .v{margin-left:auto;white-space:nowrap}.minipies{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin:6px 0 18px}.minipie{text-align:center}.minipie .t{font-size:13px;font-weight:600;margin-top:4px}.amtrow{display:flex;gap:8px;align-items:center;margin-top:6px}.amtrow label{min-width:96px;font-weight:600;margin:0}.amtrow input{flex:1;min-width:0}
 .login-logo{display:block;width:min(240px,75%);height:auto;margin:0 auto 12px}
@@ -847,6 +847,10 @@ function fieldHTML(f, val, ro) {
     case 'text': case 'num':
       return wrap(`${lab}<input id="${id}" name="${f.k}" type="text" ${f.type === 'num' || f.im ? `inputmode="${f.im || 'decimal'}"` : ''} value="${esc(val)}" ${dis} autocomplete="off" ${f.dl ? `list="dl_${f.dl}"` : ''}>`);
     case 'group': return wrap(chipSet(groupList(), false));
+    case 'photos':
+      return wrap(`<div class="lab">${esc(f.label)}</div><input type="hidden" name="${f.k}" value="${esc(val)}">
+        <div class="photos" data-photos="${f.k}">${photoThumbs(val, ro)}</div>
+        ${ro ? '' : `<label class="btn" style="margin-top:6px"><input type="file" accept="image/*" capture="environment" multiple data-photo-for="${f.k}" style="display:none">📷 ถ่ายรูป / แนบรูป</label> <span class="small muted" data-photo-msg="${f.k}"></span>`}`);
     case 'area':
       return wrap(`${lab}<textarea id="${id}" name="${f.k}" ${dis}>${esc(val)}</textarea>`);
     case 'select':
@@ -864,6 +868,55 @@ function fieldHTML(f, val, ro) {
   }
   return '';
 }
+/* ---------- รูปผลแลป (เก็บใน Google Drive ผ่าน Apps Script) ---------- */
+const photoIds = v => splitMulti(v).filter(x => /^[\w-]{10,}$/.test(x));
+function photoThumbs(val, ro) {
+  const ids = photoIds(val);
+  if (!ids.length) return ro ? '<span class="small muted">ไม่มีรูป</span>' : '';
+  return ids.map(id => `<div class="ph"><a href="https://drive.google.com/file/d/${esc(id)}/view" target="_blank" rel="noopener"><img src="https://drive.google.com/thumbnail?id=${esc(id)}&sz=w400" alt="รูปผล" loading="lazy"></a>${ro ? '' : `<button type="button" class="phdel" data-photo-del="${esc(id)}" aria-label="เอารูปนี้ออก">✕</button>`}</div>`).join('');
+}
+/** ย่อรูปก่อนอัปโหลด (ด้านยาวสุด 1600 px · JPEG) → base64 */
+function shrinkImage(file, max = 1600, q = 0.8) {
+  return new Promise((ok, bad) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url); ok(cv.toDataURL('image/jpeg', q).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); bad(new Error('อ่านไฟล์รูปไม่ได้')); };
+    img.src = url;
+  });
+}
+document.addEventListener('change', async e => {
+  const inp = e.target.closest('input[data-photo-for]'); if (!inp) return;
+  e.stopPropagation();
+  const form = inp.closest('form'), k = inp.dataset.photoFor, hid = $(`[name="${k}"]`, form), msg = $(`[data-photo-msg="${k}"]`, form);
+  const files = [...inp.files]; inp.value = '';
+  if (!files.length || !form || !form.dataset.case) return;
+  let ok = 0;
+  for (const [i, f] of files.entries()) {
+    msg.textContent = `กำลังอัปโหลด ${i + 1}/${files.length}…`;
+    try {
+      const data = await shrinkImage(f);
+      const r = await api('uploadPhoto', { caseId: form.dataset.case, sec: 'kit', data, mime: 'image/jpeg' }, 90000);
+      if (!r.ok) throw new Error(r.message || 'อัปโหลดไม่สำเร็จ');
+      hid.value = [...photoIds(hid.value), r.id].join('; '); ok++;
+    } catch (err) { toast((err.network ? 'ต้องออนไลน์จึงอัปโหลดรูปได้ — ' : '') + err.message, 'err', 6000); }
+  }
+  $(`[data-photos="${k}"]`, form).innerHTML = photoThumbs(hid.value, false);
+  msg.textContent = ok ? `อัปโหลดแล้ว ${ok} รูป — กด "บันทึกผล" เพื่อเก็บ` : '';
+  if (ok) form.dispatchEvent(new Event('input', { bubbles: true }));
+}, true);
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-photo-del]'); if (!b) return;
+  const form = b.closest('form'), box = b.closest('[data-photos]'), k = box.dataset.photos, hid = $(`[name="${k}"]`, form);
+  hid.value = photoIds(hid.value).filter(x => x !== b.dataset.photoDel).join('; ');
+  box.innerHTML = photoThumbs(hid.value, false);
+  const msg = $(`[data-photo-msg="${k}"]`, form); if (msg) msg.textContent = 'เอารูปออกแล้ว — กด "บันทึกผล" เพื่อยืนยัน';
+  form.dispatchEvent(new Event('input', { bubbles: true }));
+});
 function formHTML(fields, rec, ro) { return `<div class="grid">${fields.map(f => fieldHTML(f, rec ? rec[f.k] : '', ro)).join('')}</div>`; }
 
 /** อ่านค่าจากฟอร์ม (เฉพาะ field ที่ส่งมา) */
@@ -1519,7 +1572,8 @@ const SECTIONS = {
       { k:'kit_4dx_ehr', label:'SNAP 4Dx Plus — Ehrlichia Ab', ...KIT }, { k:'kit_4dx_lyme', label:'SNAP 4Dx Plus — Lyme Ab', ...KIT },
       { k:'kit_parvo', label:'SNAP Parvo', ...KIT }, { k:'kit_cdv', label:'CDV antigen test kit', ...KIT },
       { k:'kit_fel_felv', label:'SNAP Feline Triple — FeLV Ag', ...KIT }, { k:'kit_fel_fiv', label:'SNAP Feline Triple — FIV Ab', ...KIT },
-      { k:'kit_fel_hw', label:'SNAP Feline Triple — Heartworm Ag', ...KIT }, { k:'kit_fpv', label:'PFCC FPV', ...KIT } ],
+      { k:'kit_fel_hw', label:'SNAP Feline Triple — Heartworm Ag', ...KIT }, { k:'kit_fpv', label:'PFCC FPV', ...KIT },
+      { k:'kit_photos', label:'รูปผล test kit (ถ่ายหรือแนบได้หลายรูป)', type:'photos', w:'full' } ],
     derm: [ { k:'derm_setting', ...FL }, { k:'derm_method', label:'วิธีเก็บตัวอย่าง', type:'multi', list:'derm_method', w:'full' },
       { k:'derm_lesion', label:'Lesion', type:'text', w:'full' }, { k:'derm_results', label:'Results (เช่น Yeast 3+, Cocci 2+, Demodex)', type:'area', w:'full' } ],
     ocular: [ { k:'oc_setting', ...FL }, { k:'oc_fluo_od', label:'Fluorescein OD', type:'chips', opts:['Positive','Negative'] },
@@ -1611,7 +1665,7 @@ function summarize(g, sec, row, c) {
     case 'feces': return [r.fec_result || '(ยังไม่ระบุผล)', filled(r.fec_epg) ? 'EPG ' + r.fec_epg : '', filled(r.fec_method) ? `<span class="muted">· ${esc(r.fec_method)}</span>` : ''].filter(Boolean).join(' · ');
     case 'cyto': return [r.cyto_location, first(r.cyto_results)].filter(Boolean).join(': ');
     case 'urine': return [num('ur_usg', 'USG', '', 'usg'), filled(r.ur_crystal) ? 'Crystal ' + r.ur_crystal : '', first(r.ur_interp)].filter(Boolean).join(' · ');
-    case 'kit': return secFields(g, 'kit').filter(f => f.k !== 'kit_setting' && filled(r[f.k]) && r[f.k] !== 'ไม่ได้ตรวจ')
+    case 'kit': return secFields(g, 'kit').filter(f => f.k !== 'kit_setting' && f.type !== 'photos' && filled(r[f.k]) && r[f.k] !== 'ไม่ได้ตรวจ')
       .map(f => `${f.label.replace(/^SNAP /, '')}: ${r[f.k] === 'Positive' ? '<b class="pos">+</b>' : r[f.k] === 'Negative' ? '−' : r[f.k]}`).join(' · ');
     case 'derm': return first(r.derm_results) || r.derm_lesion;
     case 'ocular': return [filled(r.oc_fluo_od) || filled(r.oc_fluo_os) ? `Fluo OD ${r.oc_fluo_od || '-'} / OS ${r.oc_fluo_os || '-'}` : '',
@@ -1645,7 +1699,7 @@ function sectionFormHTML(c, sec, row, ro) {
   const ref = refFor(c);
   const t = TESTS.find(x => x.k === sec);
   const hasDiff = fs.some(f => f.diff);
-  return `<form id="secForm" novalidate>
+  return `<form id="secForm" novalidate data-case="${esc(c.id)}">
     <div class="card"><h2>${esc(t.label)} <span class="fl ${esc((row || {})[t.set] || '')}">${esc((row || {})[t.set] || '')}</span></h2>
       ${ref && fs.some(f => f.ref) ? `<p class="small muted" style="margin-top:0">แสดงค่าอ้างอิงโดยประมาณของ${esc(c.species || 'โค')} — ค่านอกช่วงขึ้น ↑ ↓ สีเหลือง (ยังบันทึกได้)</p>` : ''}
       <fieldset ${ro ? 'disabled' : ''}>${formHTML(fs, row || {}, ro)}</fieldset>
@@ -2654,7 +2708,7 @@ function prevTableHTML(p, title) {
 }
 /** test kit: % positive (ไม่นับ "ไม่ได้ตรวจ" · Invalid แยกแสดง) */
 function kitStats(list) {
-  const fs = SECTIONS.SA.kit.filter(f => f.k !== 'kit_setting');
+  const fs = SECTIONS.SA.kit.filter(f => f.k !== 'kit_setting' && f.type !== 'photos');
   return fs.map(f => {
     const vals = list.filter(c => c.animalGroup !== 'LA').map(c => (resultRow(c) || {})[f.k]).filter(v => ['Positive', 'Negative', 'Invalid'].includes(v));
     const pos = vals.filter(v => v === 'Positive').length, neg = vals.filter(v => v === 'Negative').length, inv = vals.filter(v => v === 'Invalid').length;
