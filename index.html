@@ -1387,7 +1387,8 @@ function bindCaseForm(root, getState, setState) {
     const cur = {}; $$('[data-amt]', amtBox).forEach(i => cur[i.dataset.amt] = i.value);
     amtBox.innerHTML = amountsInner($$('input:checked', stBox).map(i => i.value), cur, false);
   });
-  const qBox = $('#quotaBox', root);
+  const qBox = $('#quotaBox', root), hBox = $('#hnBox', root);
+  if (hBox) { const upd = () => setTimeout(() => { if (!hBox.isConnected) return; const st = getState(); const v = Object.assign({}, st, readForm(root, [FIELDS.head[0], FIELDS.head[1], FIELDS.head[2], { k:'group', type:'group' }])); if (!v.group && !isStaff()) v.group = S.session.group; hBox.innerHTML = hnBoxHTML(v, st.id); }, 0); root.addEventListener('input', upd); root.addEventListener('change', upd); }
   if (qBox) root.addEventListener('change', () => setTimeout(() => { // wait for single-select chips to settle
     if (!qBox.isConnected) return;
     const st = getState(), v = readForm(root, [FIELDS.head[0], { k:'group', type:'group' }, sampleFields()[0]]);
@@ -1413,7 +1414,7 @@ function VIEWS_new(el, mode, fromId) {
     const day = todayDay() || S.viewDay || 1;
     const pu = prefUnit(), u = unitInfo(pu);
     return { animalGroup: u.group === 'LA' ? 'LA' : 'SA', species: u.species || '', ageUnit: 'ปี', campDay: day, unit: pu, group: s.group, recorder: s.user,
-      queueNo: pu ? nextQueueNo(day, pu, s.group) : '',
+      queueNo: '', // หน่วยกรอกลำดับที่เอง (ไม่ใช่ทุกตัวที่ส่งแลป)
       // ที่อยู่ตั้งต้นของพื้นที่ค่าย (แก้ได้ใน Settings: defaultSubdistrict / defaultDistrict / defaultProvince)
       subdistrict: S.cfg.defaultSubdistrict || '', district: S.cfg.defaultDistrict || '', province: S.cfg.defaultProvince || '' };
   };
@@ -1426,7 +1427,7 @@ function VIEWS_new(el, mode, fromId) {
       st = blank();
       ['campDay', 'unit', 'group', 'animalGroup', ...FIELDS.owner.map(f => f.k), 'farmName', 'farmNo'].forEach(k => st[k] = src[k] ?? '');
       if (src.animalGroup === 'LA') { st.species = src.species; st.breed = src.breed; }
-      st.queueNo = nextQueueNo(st.campDay, st.unit, st.group);
+      st.queueNo = '';
       st.recorder = s.user; restored = false;
       history.replaceState(null, '', '#/new');
     }
@@ -1950,7 +1951,7 @@ function VIEWS_case(el, id, tab) {
 FIELDS.head = [
   { k:'campDay', label:'วันค่าย', type:'day', req:true, w:'full' },
   { k:'unit', label:'หน่วยที่เก็บตัวอย่าง', type:'unit', req:true, w:'l' },
-  { k:'queueNo', label:'ลำดับที่', type:'num', im:'numeric' }
+  { k:'queueNo', label:'ลำดับที่สัตว์เข้าหน่วย (ใช้ออก HN)', type:'num', im:'numeric', req:true }
 ];
 FIELDS.quickSA = [
   { k:'species', label:'ชนิดสัตว์', type:'chips', list:'species_SA', req:true, w:'full' },
@@ -2022,7 +2023,22 @@ function quotaHTML(day, group, selfId, g, picked) {
   const note = g === 'LA' ? ' · เลือดโค (Blood parasite) ไม่จำกัด' : '';
   return `<div class="small muted" style="margin-top:6px">โควตากลุ่ม ${esc(group)} Day ${esc(day)} (ส่งแล้ว/สูงสุด ต่อชนิด): ${qs.length ? qs.map(q => `<span class="${q.n >= q.max ? 'qfull' : ''}">${esc(q.t)} ${q.n}/${q.max}${q.n >= q.max ? ' — เต็มแล้ว' : ''}</span>`).join(' · ') : 'ยังไม่มีตัวอย่าง'}${note}</div>`;
 }
+/** HN = วัน + SA/OB/LA + กลุ่ม (2 หลัก) + ลำดับที่ (3 หลัก) เช่น 1SA02003 — ตรงกับที่เซิร์ฟเวอร์ออกให้ */
+function hnOf(v) {
+  const q = Number(v.queueNo);
+  if (!v.campDay || !(q >= 1 && q <= 999 && Math.floor(q) === q)) return '';
+  const g = v.animalGroup === 'LA' || unitInfo(v.unit).group === 'LA' ? 'LA' : (String(v.unit || '').toUpperCase() === 'OB' ? 'OB' : 'SA');
+  return String(v.campDay) + g + String(v.group || '').padStart(2, '0') + String(q).padStart(3, '0');
+}
+function hnBoxHTML(v, selfId) {
+  const hn = hnOf(v);
+  if (!hn) return '<div class="small muted" style="margin-top:6px">HN = วัน + SA/OB/LA + กลุ่ม + ลำดับที่ (เช่น 1SA02003, 1OB02003) — กรอกลำดับที่ของสัตว์ที่เข้าหน่วย</div>';
+  const dup = rows('Cases').find(c => c.id !== (selfId || v.id) && String(c.sampleNo) === hn);
+  return `<div class="small" style="margin-top:6px">HN ที่จะได้: <b class="mono" style="font-size:15px">${esc(hn)}</b>${dup ? ` <span class="qfull">— ซ้ำกับ ${esc(dup.animalName || dup.animalId || 'อีกตัว')} ตรวจลำดับที่อีกครั้ง</span>` : ''}${v.group ? '' : ' <span class="muted">(ไม่ระบุกลุ่ม = 00)</span>'}</div>`;
+}
 function quotaBlock(vals, selfId) {
+  const hn = hnOf(vals), dupHN = hn && rows('Cases').find(c => c.id !== selfId && String(c.sampleNo) === hn);
+  if (dupHN) return `HN ${hn} มีแล้ว (${dupHN.animalName || dupHN.animalId || 'อีกตัว'}) — ตรวจลำดับที่อีกครั้ง`;
   const g = vals.animalGroup === 'LA' ? 'LA' : 'SA';
   const ts = splitMulti(vals.sampleTypes).filter(t => !quotaExempt(g, t));
   const full = groupQuota(vals.campDay, vals.group, selfId, ts).filter(q => q.n >= q.max);
@@ -2050,6 +2066,7 @@ function caseFormHTML(rec, ro) {
       <h3 style="margin:14px 0 6px">Signalment</h3>${formHTML(signalFields(g), rec, ro)}
       <h3 style="margin:14px 0 6px">ตัวอย่างที่เก็บ / ส่งตรวจ</h3>
       <div class="grid">${fieldHTML(sampleFields()[0], rec.sampleTypes, ro)}${amountsFld(rec, ro)}</div>
+      <div id="hnBox">${hnBoxHTML(rec)}</div>
       <div id="quotaBox">${quotaHTML(rec.campDay, rec.group || (S.session && S.session.group), rec.id, g, splitMulti(rec.sampleTypes))}</div>
       <div style="height:8px"></div>${formHTML([testsField(g), { k:'remarks', label:'หมายเหตุ', type:'area', w:'full' }], rec, ro)}
     </fieldset></div>
@@ -3010,7 +3027,7 @@ function VIEWS_settings(el, tab) {
     if (tab === 'config') {
       body = `<div class="card"><h2>ค่าทั่วไป</h2><div class="tblwrap"><table class="tbl"><thead><tr><th>ตั้งค่า</th><th>ค่า</th></tr></thead><tbody>
         ${idx('config').map(([r, i]) => `<tr><td>${esc(r.label || r.key)}<div class="small muted mono">${esc(r.key)}</div></td><td>${inp(i, 'value')}</td></tr>`).join('')}</tbody></table></div>
-        <p class="small muted">bookingSlots = ช่วงเวลาจองห้อง คั่นด้วย , · bookingQuota = จำนวนกลุ่มต่อช่อง · sampleNoFormat ใช้ {day} {unit} {group:2} {date} {seq:3} (เช่น D{day}-{unit}-{group:2}-{seq:3} → D1-SA-12-001)</p></div>`;
+        <p class="small muted">bookingSlots = ช่วงเวลาจองห้อง คั่นด้วย , · bookingQuota = จำนวนกลุ่มต่อช่อง · HN = วัน + SA/OB/LA + กลุ่ม 2 หลัก + ลำดับที่ 3 หลัก (เช่น 1SA02003, 1OB02003, 1LA02003) — หน่วยกรอกลำดับที่เอง</p></div>`;
     } else if (tab === 'days') {
       body = `<div class="card"><h2>วันค่าย</h2><table class="tbl"><thead><tr><th>Day</th><th>ชื่อ</th><th>วันที่ (ค.ศ.)</th></tr></thead><tbody>
           ${idx('campDate').map(([r, i]) => `<tr><td class="mono">${esc(r.key)}</td><td>${inp(i, 'label')}</td><td>${inp(i, 'value', 'type="date"')}</td></tr>`).join('')}</tbody></table>
