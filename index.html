@@ -2273,13 +2273,18 @@ function cattleList(el, top) {
     el.innerHTML = top + cattleFilterHTML(f) + `<div class="card" style="padding:0">
       ${data.length ? `<div class="tblwrap" style="border:0"><table class="tbl"><thead><tr><th>เลขตัวอย่าง</th><th>ฟาร์ม</th><th>หมายเลขสัตว์</th><th>อายุ/เพศ</th><th>วิธี</th><th>ผล Positive</th><th>บันทึกโดย</th></tr></thead><tbody>
         ${data.map(r => { const ps = PATHO.filter(p => isPos(r[p.k])); return `<tr data-id="${esc(r.id)}" style="cursor:pointer">
-          <td class="mono"><b>${esc(r.sampleNo || 'รอเลข')}</b>${r._pending ? ' <span class="badge pend">⏳</span>' : ''}${r._case ? '<div class="small muted">🔗 จากเคส</div>' : ''}</td><td>${esc(r.farmName || '')}<div class="small muted">Day ${esc(r.campDay)} · ${esc(r.species || '')}</div></td>
+          <td class="mono"><b>${esc(r.sampleNo || 'รอเลข')}</b>${r._pending ? ' <span class="badge pend">⏳</span>' : ''}${r._case || r.caseId ? '<div class="small muted">🔗 จากเคส</div>' : ''}</td><td>${esc(r.farmName || '')}<div class="small muted">Day ${esc(r.campDay)} · ${esc(r.species || '')}</div></td>
           <td>${esc(r.animalId)}</td><td>${esc(r.age ?? '')} ${filled(r.age) ? 'ปี' : ''} ${esc(r.sex || '')}</td><td class="small">${esc(r.method || '')}</td>
           <td>${ps.length ? ps.map(p => `<span class="badge pospill"><i>${esc(p.sh)}</i></span>`).join(' ') : '<span class="muted">Negative ทั้งหมด</span>'}</td>
           <td class="small">${esc(r.updatedBy || r.createdBy || '')}</td></tr>`; }).join('')}
       </tbody></table></div>` : '<div class="empty">ยังไม่มีข้อมูล</div>'}</div>`;
     bindCattleFilters(el, draw);
-    $$('tr[data-id]', el).forEach(tr => tr.onclick = () => tr.dataset.id.startsWith('case:') ? go('#/case/' + encodeURIComponent(tr.dataset.id.slice(5)) + '/bp') : editCattle(tr.dataset.id, draw));
+    $$('tr[data-id]', el).forEach(tr => tr.onclick = () => {
+      const r = tr.dataset.id.startsWith('case:') ? null : getRec('BloodParasite_Cattle', tr.dataset.id);
+      const cid = tr.dataset.id.startsWith('case:') ? tr.dataset.id.slice(5) : (r && r.caseId);
+      // แถวที่มาจากเคส → แก้ที่หน้าเคส (แท็บ Blood parasite) ระบบอัปเดตชีตให้เอง
+      if (cid) go('#/case/' + encodeURIComponent(cid) + '/bp'); else editCattle(tr.dataset.id, draw);
+    });
   };
   draw();
   currentView.refresh = draw;
