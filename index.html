@@ -424,6 +424,16 @@ function applySettings(rows) {
 const campDays = () => { const n = Number(S.cfg.campDays) || Object.keys(S.campDates).length || 5; return Array.from({length: n}, (_, i) => i + 1); };
 const groupList = () => Array.from({ length: Number(S.cfg.groupCount) || 14 }, (_, i) => String(i + 1));
 const unitInfo = code => S.units.find(u => u.code === code) || {};
+/** ตัวเลือก "หน่วย" สำหรับตัวกรอง: หน่วยโคทุกหน่วย (BC, DC) รวมเป็น LA — สัตว์ใหญ่ (Large animal) ช่องเดียว */
+function unitFilterOpts(sel) {
+  let laDone = false;
+  return S.units.map(u => {
+    if (u.group === 'LA') { if (laDone) return ''; laDone = true; return `<option value="LA" ${sel === 'LA' ? 'selected' : ''}>LA — สัตว์ใหญ่ (Large animal)</option>`; }
+    return `<option value="${esc(u.code)}" ${u.code === sel ? 'selected' : ''}>${esc(u.code)} — ${esc(u.name)}</option>`;
+  }).join('');
+}
+/** เคสตรงกับตัวกรองหน่วยไหม (LA = เคสโค/สัตว์ใหญ่ทุกหน่วย) */
+const unitMatch = (c, f) => !f || (f === 'LA' ? (c.animalGroup === 'LA' || unitInfo(c.unit).group === 'LA') : c.unit === f);
 /** วันนี้เป็น Day อะไร (ตามวันที่ในตั้งค่า) ถ้าไม่ตรงวันค่าย → null */
 const todayDay = () => { const t = todayStr(); const k = Object.keys(S.campDates).find(d => S.campDates[d] === t); return k ? Number(k) : null; };
 const unitName = code => (S.units.find(u => u.code === code) || {}).name || code || '-';
@@ -1304,7 +1314,7 @@ function VIEWS_search(el, qs) {
       <div class="grid">
         <div class="fld"><label for="sday">วัน</label><select id="sday"><option value="">ทุกวัน</option>${campDays().map(d => `<option value="${d}" ${String(d) === st.day ? 'selected' : ''}>Day ${d}</option>`).join('')}</select></div>
         <div class="fld"><label for="sgno">กลุ่ม</label><select id="sgno"><option value="">ทุกกลุ่ม</option>${groupList().map(g => `<option value="${g}" ${g === String(st.gno) ? 'selected' : ''}>กลุ่ม ${g}</option>`).join('')}</select></div>
-        <div class="fld"><label for="sunit">หน่วย</label><select id="sunit"><option value="">ทุกหน่วย</option>${S.units.map(u => `<option value="${esc(u.code)}" ${u.code === st.unit ? 'selected' : ''}>${esc(u.code)} — ${esc(u.name)}</option>`).join('')}</select></div>
+        <div class="fld"><label for="sunit">หน่วย</label><select id="sunit"><option value="">ทุกหน่วย</option>${unitFilterOpts(st.unit)}</select></div>
         <div class="fld"><label for="sstatus">สถานะ</label><select id="sstatus"><option value="">ทุกสถานะ</option>${ST_ORDER.map(s => `<option ${s === st.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="fld"><label for="sgrp">ชนิดสัตว์</label><select id="sgrp"><option value="">ทั้งหมด</option><option value="SA" ${st.grp === 'SA' ? 'selected' : ''}>สัตว์เล็ก</option><option value="LA" ${st.grp === 'LA' ? 'selected' : ''}>สัตว์ใหญ่</option>
           ${[...(S.lists.species_SA || []), ...(S.lists.species_LA || [])].map(s => `<option value="sp:${esc(s)}" ${st.grp === 'sp:' + s ? 'selected' : ''}>— ${esc(s)}</option>`).join('')}</select></div>
@@ -1338,7 +1348,7 @@ function VIEWS_search(el, qs) {
     const qn = q.replace(/[-\s]/g, ''); // พิมพ์ HN แบบไม่มีขีดก็หาเจอ (1sa14005 = 1-SA-14-005)
     const f = { day: $('#sday').value, gno: $('#sgno').value, unit: $('#sunit').value, status: $('#sstatus').value, grp: $('#sgrp').value, st: $('#sst').value };
     let list = rows('Cases').filter(c =>
-      (!f.day || String(c.campDay) === f.day) && (!f.gno || String(c.group || '') === f.gno) && (!f.unit || c.unit === f.unit) &&
+      (!f.day || String(c.campDay) === f.day) && (!f.gno || String(c.group || '') === f.gno) && unitMatch(c, f.unit) &&
       (!f.status || (c.status || ST.PENDING) === f.status) &&
       (!f.grp || (f.grp.startsWith('sp:') ? c.species === f.grp.slice(3) : c.animalGroup === f.grp)) &&
       (!f.st || splitMulti(c.sampleTypes).includes(f.st)) &&
@@ -1798,7 +1808,7 @@ function VIEWS_lab(el, tab, qs) {
     const day = Number(p.day) || S.viewDay || todayDay() || 1;
     const unitF = p.unit ?? store.get('labUnit', '');
     const showF = p.show || 'all';
-    const cases = rows('Cases').filter(c => Number(c.campDay) === day && (!unitF || c.unit === unitF));
+    const cases = rows('Cases').filter(c => Number(c.campDay) === day && unitMatch(c, unitF));
     const info = c => { const g = c.animalGroup === 'LA' ? 'LA' : 'SA'; const row = resultRow(c); return { g, row }; };
     const listFor = k => cases.filter(c => {
       const { g, row } = info(c);
@@ -1822,7 +1832,7 @@ function VIEWS_lab(el, tab, qs) {
       <div class="card" style="padding:8px 12px">
         <div class="row">
           <div class="chips">${campDays().map(d => `<a class="chip" href="${q({ day: d })}"><input type="checkbox" ${d === day ? 'checked' : ''} tabindex="-1"><span>Day ${d}</span></a>`).join('')}</div>
-          <select id="labUnit" style="width:auto;min-width:180px" aria-label="หน่วย"><option value="">ทุกหน่วย</option>${S.units.map(u => `<option value="${esc(u.code)}" ${u.code === unitF ? 'selected' : ''}>${esc(u.code)} — ${esc(u.name)}</option>`).join('')}</select>
+          <select id="labUnit" style="width:auto;min-width:180px" aria-label="หน่วย"><option value="">ทุกหน่วย</option>${unitFilterOpts(unitF)}</select>
           <div class="chips">${[['all', 'ทั้งหมด'], ['todo', 'ยังไม่ลงผล'], ['pos', 'พบ/Positive']].map(([k, l]) => `<a class="chip" href="${q({ show: k })}"><input type="checkbox" ${k === showF ? 'checked' : ''} tabindex="-1"><span>${l}</span></a>`).join('')}</div>
         </div>
       </div>
