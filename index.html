@@ -1335,13 +1335,15 @@ function VIEWS_search(el, qs) {
   };
   const run = () => {
     const q = $('#sq').value.trim().toLowerCase();
+    const qn = q.replace(/[-\s]/g, ''); // พิมพ์ HN แบบไม่มีขีดก็หาเจอ (1sa14005 = 1-SA-14-005)
     const f = { day: $('#sday').value, gno: $('#sgno').value, unit: $('#sunit').value, status: $('#sstatus').value, grp: $('#sgrp').value, st: $('#sst').value };
     let list = rows('Cases').filter(c =>
       (!f.day || String(c.campDay) === f.day) && (!f.gno || String(c.group || '') === f.gno) && (!f.unit || c.unit === f.unit) &&
       (!f.status || (c.status || ST.PENDING) === f.status) &&
       (!f.grp || (f.grp.startsWith('sp:') ? c.species === f.grp.slice(3) : c.animalGroup === f.grp)) &&
       (!f.st || splitMulti(c.sampleTypes).includes(f.st)) &&
-      (!q || [c.sampleNo, c.animalName, c.ownerName, c.farmName, c.animalId].some(v => String(v || '').toLowerCase().includes(q))));
+      (!q || [c.sampleNo, c.animalName, c.ownerName, c.farmName, c.animalId].some(v => String(v || '').toLowerCase().includes(q)) ||
+        (qn && String(c.sampleNo || '').toLowerCase().replace(/[-\s]/g, '').includes(qn))));
     list.sort((a, b) => String(b.sampleNo || '~').localeCompare(String(a.sampleNo || '~'), 'th', { numeric: true }));
     // สรุปจำนวนตัวอย่างแต่ละชนิดของเคสที่กรองได้ (เช่น เลือกวัน + กลุ่ม → เห็นว่ากลุ่มนั้นเก็บอะไรไปบ้าง)
     const byType = {}; list.forEach(c => splitMulti(c.sampleTypes).forEach(t => { byType[t] = (byType[t] || 0) + 1; }));
@@ -2027,16 +2029,16 @@ function quotaHTML(day, group, selfId, g, picked) {
   const note = g === 'LA' ? ' · เลือดโค (Blood parasite) ไม่จำกัด' : '';
   return `<div class="small muted" style="margin-top:6px">โควตากลุ่ม ${esc(group)} Day ${esc(day)} (ส่งแล้ว/สูงสุด ต่อชนิด): ${qs.length ? qs.map(q => `<span class="${q.n >= q.max ? 'qfull' : ''}">${esc(q.t)} ${q.n}/${q.max}${q.n >= q.max ? ' — เต็มแล้ว' : ''}</span>`).join(' · ') : 'ยังไม่มีตัวอย่าง'}${note}</div>`;
 }
-/** HN = วัน + SA/OB/LA + กลุ่ม (2 หลัก) + ลำดับที่ (3 หลัก) เช่น 1SA02003 — ตรงกับที่เซิร์ฟเวอร์ออกให้ */
+/** HN = วัน + SA/OB/LA + กลุ่ม (2 หลัก) + ลำดับที่ (3 หลัก) คั่นด้วย - เช่น 1-SA-02-003 — ตรงกับที่เซิร์ฟเวอร์ออกให้ */
 function hnOf(v) {
   const q = Number(v.queueNo);
   if (!v.campDay || !(q >= 1 && q <= 999 && Math.floor(q) === q)) return '';
   const g = v.animalGroup === 'LA' || unitInfo(v.unit).group === 'LA' ? 'LA' : (String(v.unit || '').toUpperCase() === 'OB' ? 'OB' : 'SA');
-  return String(v.campDay) + g + String(v.group || '').padStart(2, '0') + String(q).padStart(3, '0');
+  return [String(v.campDay), g, String(v.group || '').padStart(2, '0'), String(q).padStart(3, '0')].join('-');
 }
 function hnBoxHTML(v, selfId) {
   const hn = hnOf(v);
-  if (!hn) return '<div class="small muted" style="margin-top:6px">HN = วัน + SA/OB/LA + กลุ่ม + ลำดับที่ (เช่น 1SA02003, 1OB02003) — กรอกลำดับที่ของสัตว์ที่เข้าหน่วย</div>';
+  if (!hn) return '<div class="small muted" style="margin-top:6px">HN = วัน + SA/OB/LA + กลุ่ม + ลำดับที่ (เช่น 1-SA-02-003, 1-OB-02-003) — กรอกลำดับที่ของสัตว์ที่เข้าหน่วย</div>';
   const dup = rows('Cases').find(c => c.id !== (selfId || v.id) && String(c.sampleNo) === hn);
   return `<div class="small" style="margin-top:6px">HN ที่จะได้: <b class="mono" style="font-size:15px">${esc(hn)}</b>${dup ? ` <span class="qfull">— ซ้ำกับ ${esc(dup.animalName || dup.animalId || 'อีกตัว')} ตรวจลำดับที่อีกครั้ง</span>` : ''}${v.group ? '' : ' <span class="muted">(ไม่ระบุกลุ่ม = 00)</span>'}</div>`;
 }
@@ -3031,7 +3033,7 @@ function VIEWS_settings(el, tab) {
     if (tab === 'config') {
       body = `<div class="card"><h2>ค่าทั่วไป</h2><div class="tblwrap"><table class="tbl"><thead><tr><th>ตั้งค่า</th><th>ค่า</th></tr></thead><tbody>
         ${idx('config').map(([r, i]) => `<tr><td>${esc(r.label || r.key)}<div class="small muted mono">${esc(r.key)}</div></td><td>${inp(i, 'value')}</td></tr>`).join('')}</tbody></table></div>
-        <p class="small muted">bookingSlots = ช่วงเวลาจองห้อง คั่นด้วย , · bookingQuota = จำนวนกลุ่มต่อช่อง · HN = วัน + SA/OB/LA + กลุ่ม 2 หลัก + ลำดับที่ 3 หลัก (เช่น 1SA02003, 1OB02003, 1LA02003) — หน่วยกรอกลำดับที่เอง</p></div>`;
+        <p class="small muted">bookingSlots = ช่วงเวลาจองห้อง คั่นด้วย , · bookingQuota = จำนวนกลุ่มต่อช่อง · HN = วัน + SA/OB/LA + กลุ่ม 2 หลัก + ลำดับที่ 3 หลัก (เช่น 1-SA-02-003, 1-OB-02-003, 1-LA-02-003) — หน่วยกรอกลำดับที่เอง</p></div>`;
     } else if (tab === 'days') {
       body = `<div class="card"><h2>วันค่าย</h2><table class="tbl"><thead><tr><th>Day</th><th>ชื่อ</th><th>วันที่ (ค.ศ.)</th></tr></thead><tbody>
           ${idx('campDate').map(([r, i]) => `<tr><td class="mono">${esc(r.key)}</td><td>${inp(i, 'label')}</td><td>${inp(i, 'value', 'type="date"')}</td></tr>`).join('')}</tbody></table>
