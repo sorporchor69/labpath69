@@ -424,7 +424,7 @@ function applySettings(rows) {
 const campDays = () => { const n = Number(S.cfg.campDays) || Object.keys(S.campDates).length || 5; return Array.from({length: n}, (_, i) => i + 1); };
 const groupList = () => Array.from({ length: Number(S.cfg.groupCount) || 14 }, (_, i) => String(i + 1));
 const unitInfo = code => S.units.find(u => u.code === code) || {};
-/** ตัวเลือก "หน่วย" สำหรับตัวกรอง: หน่วยโคทุกหน่วย (BC, DC) รวมเป็น LA — สัตว์ใหญ่ (Large animal) ช่องเดียว */
+/** ตัวเลือก "หน่วย" สำหรับตัวกรอง: หน่วยโคทุกหน่วย รวมเป็น LA — สัตว์ใหญ่ (Large animal) ช่องเดียว */
 function unitFilterOpts(sel) {
   let laDone = false;
   return S.units.map(u => {
@@ -1198,7 +1198,7 @@ function groupChipsHTML(sel, allowNone) {
     (allowNone ? `<label class="chip"><input type="radio" name="group" value="" ${sel === '' ? 'checked' : ''}><span>ไม่สังกัดกลุ่ม (Lab-path / ส่วนกลาง)</span></label>` : '');
 }
 /** หน่วยที่ใช้ล่าสุดในเครื่องนี้ — ใช้เป็นค่าตั้งต้นของช่อง "หน่วย" ในฟอร์ม (ไม่ใช่ตัวตนผู้ใช้) */
-const prefUnit = () => store.get('prefUnit', '');
+const prefUnit = () => { const u = store.get('prefUnit', ''); return u === 'BC' || u === 'DC' ? 'LA' : u; }; // หน่วยโคเดิม BC/DC รวมเป็น LA แล้ว
 const setPrefUnit = u => { if (u) store.set('prefUnit', u); };
 
 /** เปลี่ยนกลุ่ม (ไม่ต้องเข้าใช้งานใหม่) — บันทึกลง AuditLog ด้วย */
