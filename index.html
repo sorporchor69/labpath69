@@ -3049,9 +3049,52 @@ function kpiExport(list, f) {
   toast('ดาวน์โหลด KPI แล้ว', 'ok');
 }
 
+/** รายงาน PBL โค: แถวโค (เคสรายตัว + กรอกเป็นชุด) ตามตัวกรองรายงาน */
+function repCattle(f) {
+  if (f.sp && f.sp !== 'โค/สัตว์ใหญ่') return [];
+  return cattleAll().filter(r => (!f.day || String(r.campDay) === f.day) && (!f.unit || f.unit === 'LA' || r.unit === f.unit));
+}
+const repCattleNote = f => f.sp && f.sp !== 'โค/สัตว์ใหญ่' ? '<div class="alert info small">PCV / crit และสี plasma ตรวจเฉพาะโค — เลือกชนิดสัตว์ "โค/สัตว์ใหญ่" หรือ "ทั้งหมด"</div>'
+  : '<div class="alert info small">รวมจากเคสโครายตัว (แท็บ PCV/Plasma) และการกรอกเป็นชุด · ดูรายตัวและ CSV ได้ที่ <a href="#/cattle/ind">🐄 PBL โค</a></div>';
+function critReportHTML(cat) {
+  const P = pcvStats(cat);
+  if (!P) return '<div class="card"><h2>PCV / crit</h2><div class="empty small">ยังไม่มีค่า PCV ตามตัวกรอง</div></div>';
+  const bins = [['< 15% (โลหิตจางรุนแรง)', 0, 15], ['15–19%', 15, 20], ['20–23%', 20, 24], ['24–46% (ปกติ)', 24, 46.0001], ['> 46%', 46.0001, 1e9]];
+  const row = (label, q) => !q ? '' : `<tr><td>${label}</td><td class="n mono">${q.n}</td><td class="n mono">${q.mean.toFixed(1)} ± ${q.sd.toFixed(1)}</td><td class="n mono">${q.med.toFixed(1)}</td><td class="n mono">${q.min}–${q.max}</td>${ciCells(q.an, q.n)}</tr>`;
+  const both = cat.filter(r => bpDone(r) && pcvOf(r) !== null);
+  return `<div class="card"><h2>PCV / crit — ตรวจ ${P.n} ตัว · โลหิตจาง (PCV &lt; ${ANEMIA_PCV}%) ${P.an} ตัว (${pct(P.an / P.n)}%)</h2>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>กลุ่ม</th><th class="n">n</th><th class="n">เฉลี่ย ± SD (%)</th><th class="n">มัธยฐาน</th><th class="n">ต่ำสุด–สูงสุด</th><th class="n">โลหิตจาง</th><th class="n">n</th><th class="n">%</th><th class="n">95% CI</th></tr></thead><tbody>
+        ${row('<b>โคทั้งหมด</b>', P)}
+        ${campDays().map(d => row('Day ' + d, pcvStats(cat.filter(r => Number(r.campDay) === d)))).join('')}
+        ${[...new Set(cat.map(r => r.species).filter(Boolean))].sort().map(sp => row(esc(sp), pcvStats(cat.filter(r => r.species === sp)))).join('')}
+        ${both.length ? row('พบ Blood parasite ≥1 ชนิด', pcvStats(both.filter(r => PATHO.some(p => isPos(r[p.k]))))) + row('ไม่พบ Blood parasite', pcvStats(both.filter(r => !PATHO.some(p => isPos(r[p.k]))))) : ''}
+      </tbody></table></div>
+      <h3 style="margin:14px 0 6px">การกระจายของค่า PCV</h3>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>ช่วง PCV</th><th class="n">จำนวน</th><th class="n">%</th><th style="width:45%">กราฟ</th></tr></thead><tbody>
+        ${bins.map(([l, lo, hi]) => { const x = P.v.filter(v => v >= lo && v < hi).length; return `<tr><td>${esc(l)}</td><td class="n mono">${x}</td><td class="n mono">${pct(x / P.n)}</td><td><div class="cibar"><i style="width:${(x / P.n * 100).toFixed(1)}%;${lo < ANEMIA_PCV ? 'background:#dc2626' : ''}"></i></div></td></tr>`; }).join('')}
+      </tbody></table></div>
+      <p class="small muted">ช่วงอ้างอิง PCV โค 24–46% · โลหิตจาง = PCV &lt; ${ANEMIA_PCV}% · 95% CI แบบ Wilson</p></div>`;
+}
+function plasmaReportHTML(cat) {
+  const sr = cat.filter(r => filled(r.serumColor));
+  if (!sr.length) return '<div class="card"><h2>สี plasma</h2><div class="empty small">ยังไม่มีข้อมูลสี plasma ตามตัวกรอง</div></div>';
+  const keys = [...new Set((S.lists.serum_color || []).concat(sr.map(r => r.serumColor)))];
+  const items = keys.map((k, i) => ({ label: k, v: sr.filter(r => r.serumColor === k).length, color: SERUM_COLOR_HEX[i % SERUM_COLOR_HEX.length] })).filter(i => i.v);
+  const line = (label, L) => !L.length ? '' : `<tr><td>${label}</td><td class="n mono">${L.length}</td>${items.map(i => { const x = L.filter(r => r.serumColor === i.label).length; return `<td class="n mono">${x ? `${x} <span class="muted">(${pct(x / L.length)}%)</span>` : '0'}</td>`; }).join('')}</tr>`;
+  return `<div class="card"><h2>สี plasma — ดูแล้ว ${sr.length} ตัว</h2>
+      <div class="pies">${pieSVG(items, 170)}<ul class="pielg">${items.map(i => `<li><span class="dot" style="background:${i.color};border:1px solid #cbd5e1"></span><span>${esc(i.label)}</span><span class="v mono">${i.v}/${sr.length} · <b>${pct(i.v / sr.length)}%</b></span></li>`).join('')}</ul></div>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>กลุ่ม</th><th class="n">n</th>${items.map(i => `<th class="n">${esc(i.label)}</th>`).join('')}</tr></thead><tbody>
+        ${line('<b>โคทั้งหมด</b>', sr)}
+        ${campDays().map(d => line('Day ' + d, sr.filter(r => Number(r.campDay) === d))).join('')}
+        ${[...new Set(sr.map(r => r.species).filter(Boolean))].sort().map(sp => line(esc(sp), sr.filter(r => r.species === sp))).join('')}
+        ${line('PCV &lt; ' + ANEMIA_PCV + '% (โลหิตจาง)', sr.filter(isAnemic))}
+        ${line('PCV ปกติ', sr.filter(r => pcvOf(r) !== null && !isAnemic(r)))}
+      </tbody></table></div></div>`;
+}
+
 function VIEWS_reports(el, tab) {
   if (!isStaff()) { el.innerHTML = '<div class="card empty">หน้านี้สำหรับ Lab-path / Admin</div>'; return; }
-  tab = ['sum', 'kpi', 'fecal', 'bp', 'kit', 'export'].includes(tab) ? tab : 'sum';
+  tab = ['sum', 'kpi', 'fecal', 'bp', 'crit', 'plasma', 'kit', 'export'].includes(tab) ? tab : 'sum';
   const draw = () => {
     const f = repFilters(), list = repCases(f);
     const sel = (k, label, opts) => `<div class="fld"><label>${label}</label><select data-rf="${k}"><option value="">ทั้งหมด</option>${opts.map(([v, t]) => `<option value="${esc(v)}" ${String(f[k]) === String(v) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`;
@@ -3083,6 +3126,10 @@ function VIEWS_reports(el, tab) {
       body = `<div class="alert info small">จากผลตรวจรายตัวในหน้าผลแลป (แท็บ Blood parasite) · ข้อมูลสำรวจโคแบบกรอกเป็นชุดดูที่ <a href="#/cattle">🐄 Blood parasite โค</a></div>` +
         prevTableHTML(organismPrev(list, 'bp', 'bp_result'), 'ความชุกพยาธิในเม็ดเลือด (เคสรายตัว)') +
         (f.sp ? '' : sps.map(sp => prevTableHTML(organismPrev(list.filter(c => speciesGroup(c) === sp), 'bp', 'bp_result'), '— ' + sp)).join(''));
+    } else if (tab === 'crit') {
+      body = repCattleNote(f) + critReportHTML(repCattle(f));
+    } else if (tab === 'plasma') {
+      body = repCattleNote(f) + plasmaReportHTML(repCattle(f));
     } else if (tab === 'kit') {
       const ks = kitStats(list);
       body = `<div class="card"><h2>Test kit — % positive (ไม่นับ "ไม่ได้ตรวจ" · % คิดจาก Positive + Negative)</h2><div class="tblwrap"><table class="tbl">
@@ -3100,7 +3147,7 @@ function VIEWS_reports(el, tab) {
           <p class="small muted">สรุปแยกตามชนิดสัตว์ · มี 95% CI (Wilson) · ไม่มีข้อมูลระบุตัวตน</p></div>`;
     }
     el.innerHTML = `<h1>รายงาน / Export <span class="small muted">สำหรับ Lab-path</span></h1>
-      <nav class="tabs">${[['sum', '📋 สรุป'], ['kpi', '🎯 KPI รายวัน'], ['fecal', '💩 พยาธิทางเดินอาหาร'], ['bp', '🩸 พยาธิในเม็ดเลือด'], ['kit', '🧪 Test kit'], ['export', '⬇ Export CSV']]
+      <nav class="tabs">${[['sum', '📋 สรุป'], ['kpi', '🎯 KPI รายวัน'], ['fecal', '💩 พยาธิทางเดินอาหาร'], ['bp', '🩸 พยาธิในเม็ดเลือด'], ['crit', '📈 Crit / PCV'], ['plasma', '🟡 สี plasma'], ['kit', '🧪 Test kit'], ['export', '⬇ Export CSV']]
         .map(([k, t]) => `<a href="#/reports/${k}" class="${k === tab ? 'act' : ''}">${t}</a>`).join('')}</nav>
       <div class="card"><div class="grid">${sel('day', 'วัน', campDays().map(d => [d, 'Day ' + d]))}${sel('unit', 'หน่วย', S.units.map(u => [u.code, u.code + ' — ' + u.name]))}${sel('sp', 'ชนิดสัตว์', sps.map(s => [s, s]))}</div></div>
       ${body}`;
