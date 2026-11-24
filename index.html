@@ -987,7 +987,7 @@ const NAV = [
   { r:'search', ic:'🔍', t:'หน้าแรก · ค้นหาสัตว์' },
   { r:'lab', ic:'🧪', t:'ผลแลปวันนี้' },
   { r:'new', ic:'＋', t:'รับตัวอย่าง' },
-  { r:'cattle', ic:'🐄', t:'Blood parasite · PCV · plasma โค' },
+  { r:'cattle', ic:'🐄', t:'PBL โค' },
   { sec:'ห้องแลป' },
   { r:'kits', ic:'🧰', t:'เบิก/คืน Test kit' },
   { r:'booking', ic:'📅', t:'จองห้องแลป' },
@@ -1021,7 +1021,7 @@ function renderShell() {
     <a href="#/search" data-r="search"><span class="ic">🔍</span>ค้นหา</a>
     <a href="#/lab" data-r="lab"><span class="ic">🧪</span>ผลแลป</a>
     <a href="#/new" data-r="new" class="plus"><span class="ic">＋</span>รับตัวอย่าง</a>
-    <a href="#/cattle" data-r="cattle"><span class="ic">🐄</span>BP โค</a>
+    <a href="#/cattle" data-r="cattle"><span class="ic">🐄</span>PBL โค</a>
     <button id="moreBtn"><span class="ic">☰</span>เมนู</button>
   </nav>
   <datalist id="dl_members">${S.members.map(m => `<option value="${esc(m.name)}">กลุ่ม ${esc(m.group)}</option>`).join('')}</datalist>`;
