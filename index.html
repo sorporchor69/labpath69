@@ -1629,7 +1629,7 @@ const SECTIONS = {
       { k:'chem_interp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
     bp: [ { k:'bp_setting', ...FL }, { k:'bp_method', label:'Methods', type:'multi', list:'bp_method_LA', w:'full' },
       { k:'bp_result', label:'ผลที่พบ', type:'multi', list:'bp_result_LA', w:'full', pos:true }, { k:'bp_note', label:'หมายเหตุ', type:'area', w:'full' } ],
-    pcv: [ { k:'pcv_setting', ...FL }, { k:'pcv', label:'PCV / Hematocrit (%)', type:'num', ref:'hct' },
+    pcv: [ { k:'pcv_setting', ...FL }, { k:'pcv', label:'PCV / Hematocrit (%) — ค่าเดียวกับ Hct ในแท็บ Blood', type:'num', ref:'hct' },
       { k:'serum_color', label:'สี plasma', type:'chips', list:'serum_color', w:'full' }, { k:'pcv_note', label:'หมายเหตุ', type:'area', w:'full' } ],
     feces: [ { k:'fec_setting', ...FL }, { k:'fec_method', label:'Method', type:'multi', list:'fec_method', w:'full' },
       { k:'fec_result', label:'ผลที่พบ', type:'multi', list:'fec_result_LA', w:'full', pos:true }, { k:'fec_epg', label:'Fecal egg count (EPG)', type:'num' },
@@ -1663,7 +1663,8 @@ const filled = v => v !== '' && v !== null && v !== undefined;
 function hasData(g, sec, row) {
   if (!row) return false;
   const t = TESTS.find(x => x.k === sec);
-  return secFields(g, sec).some(f => f.k !== t.set && filled(row[f.k]));
+  // โค: Hct ใช้ร่วมกับ PCV → แท็บ Blood (CBC) นับว่าลงผลเมื่อมีค่าอื่นนอกจาก Hct
+  return secFields(g, sec).some(f => f.k !== t.set && !(g === 'LA' && sec === 'blood' && f.k === 'hct') && filled(row[f.k]));
 }
 function isPositive(g, sec, row) {
   if (!row) return false;
@@ -1718,6 +1719,12 @@ function summaryHTML(g, sec, row, c) {
 async function saveSection(c, sec, vals) {
   const sheet = RES_SHEET(c.animalGroup);
   const row = resultRow(c);
+  // โค: Hct (แท็บ Blood) = PCV (แท็บ PCV/Plasma) — กรอกที่ไหนก็ขึ้นทั้งสองที่ (เซิร์ฟเวอร์ทำซ้ำอีกชั้น)
+  if (c.animalGroup === 'LA') {
+    const was = k => String((row || {})[k] ?? '');
+    if ('hct' in vals && String(vals.hct ?? '') !== was('hct')) vals.pcv = vals.hct;
+    else if ('pcv' in vals && String(vals.pcv ?? '') !== was('pcv')) vals.hct = vals.pcv;
+  }
   if (!row) return saveRecord(sheet, c.id.slice(0, 60) + '-r1', Object.assign({ caseId: c.id, examNo: 1 }, vals), { isNew: true });
   const ch = diffOf(row, vals);
   if (!Object.keys(ch).length) return { nochange: true };
