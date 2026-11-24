@@ -2284,16 +2284,16 @@ function cattleEntry(el, top) {
   draw();
 }
 
-function cattleFilters() { return Object.assign({ day: '', farm: '', species: '', unit: '', method: '' }, store.get('bpFilter', {})); }
+function cattleFilters() { return Object.assign({ day: '', group: '', farm: '', species: '', unit: '', method: '' }, store.get('bpFilter', {})); }
 function cattleFiltered(f) {
-  return cattleAll().filter(r => (!f.day || String(r.campDay) === f.day) && (!f.farm || r.farmName === f.farm) &&
+  return cattleAll().filter(r => (!f.day || String(r.campDay) === f.day) && (!f.group || String(r.group || '') === String(f.group)) && (!f.farm || r.farmName === f.farm) &&
     (!f.species || r.species === f.species) && (!f.unit || r.unit === f.unit) && (!f.method || r.method === f.method));
 }
 function cattleFilterHTML(f) {
   const all = cattleAll();
   const opt = (k, label, vals, show = v => v) => `<div class="fld"><label>${label}</label><select data-f="${k}"><option value="">ทั้งหมด</option>${vals.map(v => `<option value="${esc(v)}" ${String(f[k]) === String(v) ? 'selected' : ''}>${esc(show(v))}</option>`).join('')}</select></div>`;
   const uniq = k => [...new Set(all.map(r => r[k]).filter(filled))].sort();
-  return `<div class="card"><div class="grid">${opt('day', 'วัน', campDays().map(String), v => 'Day ' + v)}${opt('farm', 'ฟาร์ม', uniq('farmName'))}
+  return `<div class="card"><div class="grid">${opt('day', 'วัน', campDays().map(String), v => 'Day ' + v)}${opt('group', 'กลุ่ม', groupList(), v => 'กลุ่ม ' + v)}${opt('farm', 'ฟาร์ม', uniq('farmName'))}
     ${opt('species', 'ชนิดสัตว์', uniq('species'))}${opt('unit', 'หน่วย', uniq('unit'))}${opt('method', 'วิธีตรวจ', uniq('method'))}</div></div>`;
 }
 function bindCattleFilters(el, redraw) {
