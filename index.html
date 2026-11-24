@@ -2191,13 +2191,13 @@ function downloadCSV(name, header, data) {
 }
 
 function VIEWS_cattle(el, tab) {
-  tab = ['entry', 'prev', 'list'].includes(tab) ? tab : 'prev';
-  const tabsHTML = `<nav class="tabs">${[['prev', '📊 สรุปผล (BP · PCV · plasma)'], ['entry', '✍️ กรอกเป็นชุด'], ['list', '📋 รายการทั้งหมด']]
+  tab = ['entry', 'prev', 'pcv', 'plasma', 'list'].includes(tab) ? tab : 'prev';
+  const tabsHTML = `<nav class="tabs">${[['prev', '🩸 Blood parasite'], ['pcv', '📈 PCV / crit'], ['plasma', '🧪 สี plasma'], ['entry', '✍️ กรอกเป็นชุด'], ['list', '📋 รายการทั้งหมด']]
     .map(([k, t]) => `<a href="#/cattle/${k}" class="${k === tab ? 'act' : ''}">${t}</a>`).join('')}</nav>`;
-  const head = `<h1>Blood parasite · PCV · สี plasma ในโค <span class="small muted">PBL — โคที่เก็บเลือดทุกตัวตรวจครบ 3 อย่าง</span></h1>`;
+  const head = `<h1>PBL โค <span class="small muted">Blood parasite · PCV/crit · สี plasma — โคที่เก็บเลือดทุกตัวตรวจครบ 3 อย่าง</span></h1>`;
   if (tab === 'entry') return cattleEntry(el, head + tabsHTML);
   if (tab === 'list') return cattleList(el, head + tabsHTML);
-  return cattlePrev(el, head + tabsHTML);
+  return cattlePrev(el, head + tabsHTML, tab);
 }
 
 function cattleEntry(el, top) {
@@ -2299,7 +2299,7 @@ function bindCattleFilters(el, redraw) {
   $$('[data-f]', el).forEach(s => s.onchange = () => { const f = cattleFilters(); f[s.dataset.f] = s.value; store.set('bpFilter', f); redraw(); });
 }
 
-function cattlePrev(el, top) {
+function cattlePrev(el, top, mode = 'prev') {
   const draw = () => {
     const f = cattleFilters(), all = cattleFiltered(f), data = all.filter(bpDone), n = data.length;
     const by = store.get('bpBy', 'farmName');
@@ -2307,60 +2307,79 @@ function cattlePrev(el, top) {
     const st = stat(data);
     const anyX = data.filter(r => PATHO.some(p => isPos(r[p.k]))).length, anyCI = wilson(anyX, n);
     const P = pcvStats(all), sr = all.filter(r => filled(r.serumColor));
-    const sItems = [...new Set((S.lists.serum_color || []).concat(sr.map(r => r.serumColor)))].map((k, i) => ({ label: k, v: sr.filter(r => r.serumColor === k).length, color: SERUM_COLOR_HEX[i % SERUM_COLOR_HEX.length] })).filter(i => i.v);
+    const colorKeys = [...new Set((S.lists.serum_color || []).concat(sr.map(r => r.serumColor)))];
+    const colorOf = k => SERUM_COLOR_HEX[colorKeys.indexOf(k) % SERUM_COLOR_HEX.length];
+    const sItems = colorKeys.map(k => ({ label: k, v: sr.filter(r => r.serumColor === k).length, color: colorOf(k) })).filter(i => i.v);
     const bins = [['< 15% (โลหิตจางรุนแรง)', 0, 15], ['15–19%', 15, 20], ['20–23%', 20, 24], ['24–46% (ปกติ)', 24, 46.0001], ['> 46%', 46.0001, 1e9]];
     const both = all.filter(r => bpDone(r) && pcvOf(r) !== null), bpPos = both.filter(r => PATHO.some(p => isPos(r[p.k]))), bpNeg = both.filter(r => !PATHO.some(p => isPos(r[p.k])));
-    const pcvCard = !P && !sr.length ? '' : `<div class="card"><h2>PCV / Hematocrit และสี plasma</h2>
-      ${P ? `<p>ตรวจ PCV ${P.n} ตัว · เฉลี่ย <b>${P.mean.toFixed(1)}%</b> (SD ${P.sd.toFixed(1)}) · มัธยฐาน ${P.med.toFixed(1)}% · ต่ำสุด–สูงสุด ${P.min}–${P.max}%<br>
-        โลหิตจาง (PCV &lt; ${ANEMIA_PCV}%) <b>${P.an} ตัว (${pct(P.an / P.n)}%, 95% CI ${pct(P.ci[0])}–${pct(P.ci[1])}%)</b></p>
-      <div class="tblwrap"><table class="tbl"><thead><tr><th>ช่วง PCV</th><th class="n">จำนวน</th><th class="n">%</th><th style="width:45%">กราฟ</th></tr></thead><tbody>
-        ${bins.map(([l, lo, hi]) => { const x = P.v.filter(v => v >= lo && v < hi).length; return `<tr><td>${esc(l)}</td><td class="n mono">${x}</td><td class="n mono">${pct(x / P.n)}</td><td><div class="cibar"><i style="width:${(x / P.n * 100).toFixed(1)}%;${lo < ANEMIA_PCV ? 'background:#dc2626' : ''}"></i></div></td></tr>`; }).join('')}
-      </tbody></table></div>` : '<p class="muted">ยังไม่มีค่า PCV</p>'}
-      ${both.length ? `<h3 style="margin:14px 0 6px">PCV เทียบกับผล Blood parasite</h3><div class="tblwrap"><table class="tbl"><thead><tr><th>กลุ่ม</th><th class="n">n</th><th class="n">PCV เฉลี่ย (%)</th><th class="n">โลหิตจาง</th></tr></thead><tbody>
-        ${[['พบเชื้ออย่างน้อย 1 ชนิด', bpPos], ['ไม่พบเชื้อ', bpNeg]].map(([l, L]) => { const q = pcvStats(L); return `<tr><td>${l}</td><td class="n mono">${L.length}</td><td class="n mono">${q ? q.mean.toFixed(1) + ' ± ' + q.sd.toFixed(1) : '-'}</td><td class="n mono">${q ? `${q.an} (${pct(q.an / q.n)}%)` : '-'}</td></tr>`; }).join('')}
-      </tbody></table></div>` : ''}
-      <h3 style="margin:14px 0 6px">สี plasma <span class="small muted">— ดูแล้ว ${sr.length} ตัว</span></h3>
-      ${sr.length ? `<div class="pies">${pieSVG(sItems, 170)}<ul class="pielg">${sItems.map(i => `<li><span class="dot" style="background:${i.color}"></span><span>${esc(i.label)}</span><span class="v mono">${i.v}/${sr.length} · <b>${pct(i.v / sr.length)}%</b></span></li>`).join('')}</ul></div>` : '<p class="muted">ยังไม่มีข้อมูลสี plasma</p>'}
-      <p class="small muted">PCV ช่วงอ้างอิงโค 24–46% · ข้อมูลรวมจากการกรอกเป็นชุดและเคสโครายตัว (แท็บ PCV/Plasma ในหน้าเคส)</p></div>`;
     const groups = [...new Set(all.map(r => String(r[by] ?? '')))].sort((a, b) => a.localeCompare(b, 'th', { numeric: true }));
     const byLabel = { farmName: 'ฟาร์ม', campDay: 'วัน', species: 'ชนิดสัตว์', sex: 'เพศ', unit: 'หน่วย' };
-    el.innerHTML = top + cattleFilterHTML(f) + (all.length ? `
-      ${n ? `<div class="card"><h2>ความชุกรวม — ตรวจ ${n} ตัว · พบอย่างน้อย 1 ชนิด ${anyX} ตัว (${pct(anyX / n)}%, 95% CI ${pct(anyCI[0])}–${pct(anyCI[1])}%)</h2>
+    const gName = gv => esc(by === 'campDay' ? 'Day ' + gv : gv || '(ไม่ระบุ)');
+    const bySel = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">แยกตาม</h2>
+        <select id="bpBy" style="width:auto">${Object.entries(byLabel).map(([k, l]) => `<option value="${k}" ${k === by ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+    const src = L => `<p class="small muted">🔗 รวมข้อมูลอัตโนมัติ: กรอกเป็นชุด ${L.filter(r => !r._case && !r.caseId).length} ตัว + เคสโครายตัว ${L.filter(r => r._case || r.caseId).length} ตัว · อัปเดตเองเมื่อมีคนลงผลเพิ่ม</p>`;
+    let body = '';
+    if (mode === 'pcv') {
+      body = !P ? '<div class="card empty">ยังไม่มีค่า PCV ตามตัวกรอง — ลงผลในแท็บ PCV/Plasma ของเคสโค หรือกรอกเป็นชุด</div>' : `
+      <div class="card"><h2>PCV / Hematocrit — ตรวจ ${P.n} ตัว</h2>
+        <p>เฉลี่ย <b>${P.mean.toFixed(1)}%</b> (SD ${P.sd.toFixed(1)}) · มัธยฐาน ${P.med.toFixed(1)}% · ต่ำสุด–สูงสุด ${P.min}–${P.max}%<br>
+          โลหิตจาง (PCV &lt; ${ANEMIA_PCV}%) <b>${P.an} ตัว (${pct(P.an / P.n)}%, 95% CI ${pct(P.ci[0])}–${pct(P.ci[1])}%)</b></p>
+        <div class="tblwrap"><table class="tbl"><thead><tr><th>ช่วง PCV</th><th class="n">จำนวน</th><th class="n">%</th><th style="width:45%">กราฟ</th></tr></thead><tbody>
+          ${bins.map(([l, lo, hi]) => { const x = P.v.filter(v => v >= lo && v < hi).length; return `<tr><td>${esc(l)}</td><td class="n mono">${x}</td><td class="n mono">${pct(x / P.n)}</td><td><div class="cibar"><i style="width:${(x / P.n * 100).toFixed(1)}%;${lo < ANEMIA_PCV ? 'background:#dc2626' : ''}"></i></div></td></tr>`; }).join('')}
+        </tbody></table></div>
+        ${both.length ? `<h3 style="margin:14px 0 6px">PCV เทียบกับผล Blood parasite</h3><div class="tblwrap"><table class="tbl"><thead><tr><th>กลุ่ม</th><th class="n">n</th><th class="n">PCV เฉลี่ย ± SD (%)</th><th class="n">โลหิตจาง</th></tr></thead><tbody>
+          ${[['พบเชื้ออย่างน้อย 1 ชนิด', bpPos], ['ไม่พบเชื้อ', bpNeg]].map(([l, L]) => { const q = pcvStats(L); return `<tr><td>${l}</td><td class="n mono">${L.length}</td><td class="n mono">${q ? q.mean.toFixed(1) + ' ± ' + q.sd.toFixed(1) : '-'}</td><td class="n mono">${q ? `${q.an} (${pct(q.an / q.n)}%)` : '-'}</td></tr>`; }).join('')}
+        </tbody></table></div>` : ''}
+        <p class="small muted">ช่วงอ้างอิง PCV โค 24–46% · โลหิตจาง = PCV &lt; ${ANEMIA_PCV}%</p>${src(all.filter(r => pcvOf(r) !== null))}</div>
+      <div class="card">${bySel}
+        <div class="tblwrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>${byLabel[by]}</th><th class="n">n</th><th class="n">เฉลี่ย ± SD (%)</th><th class="n">มัธยฐาน</th><th class="n">ต่ำสุด–สูงสุด</th><th class="n">โลหิตจาง</th></tr></thead><tbody>
+        ${groups.map(gv => { const q = pcvStats(all.filter(r => String(r[by] ?? '') === gv)); return !q ? '' : `<tr><td>${gName(gv)}</td><td class="n mono">${q.n}</td><td class="n mono">${q.mean.toFixed(1)} ± ${q.sd.toFixed(1)}</td><td class="n mono">${q.med.toFixed(1)}</td><td class="n mono">${q.min}–${q.max}</td><td class="n mono ${q.an ? 'hl' : ''}">${q.an} (${pct(q.an / q.n)}%)</td></tr>`; }).join('')}
+        </tbody></table></div></div>`;
+    } else if (mode === 'plasma') {
+      body = !sr.length ? '<div class="card empty">ยังไม่มีข้อมูลสี plasma ตามตัวกรอง — ลงผลในแท็บ PCV/Plasma ของเคสโค หรือกรอกเป็นชุด</div>' : `
+      <div class="card"><h2>สี plasma — ดูแล้ว ${sr.length} ตัว</h2>
+        <div class="pies">${pieSVG(sItems, 170)}<ul class="pielg">${sItems.map(i => `<li><span class="dot" style="background:${i.color};border:1px solid #cbd5e1"></span><span>${esc(i.label)}</span><span class="v mono">${i.v}/${sr.length} · <b>${pct(i.v / sr.length)}%</b></span></li>`).join('')}</ul></div>
+        ${src(sr)}</div>
+      <div class="card">${bySel}
+        <div class="tblwrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>${byLabel[by]}</th><th class="n">n</th>${sItems.map(i => `<th class="n">${esc(i.label)}</th>`).join('')}</tr></thead><tbody>
+        ${groups.map(gv => { const L = sr.filter(r => String(r[by] ?? '') === gv); return !L.length ? '' : `<tr><td>${gName(gv)}</td><td class="n mono">${L.length}</td>${sItems.map(i => { const x = L.filter(r => r.serumColor === i.label).length; return `<td class="n mono">${x ? `${x} <span class="muted">(${pct(x / L.length)}%)</span>` : '0'}</td>`; }).join('')}</tr>`; }).join('')}
+        </tbody></table></div></div>`;
+    } else {
+      body = !n ? '<div class="card empty">ยังไม่มีผล Blood parasite ตามตัวกรอง</div>' : `
+      <div class="card"><h2>ความชุกรวม — ตรวจ ${n} ตัว · พบอย่างน้อย 1 ชนิด ${anyX} ตัว (${pct(anyX / n)}%, 95% CI ${pct(anyCI[0])}–${pct(anyCI[1])}%)</h2>
         <div class="tblwrap"><table class="tbl"><thead><tr><th>เชื้อ</th><th class="n">Positive</th><th class="n">ตรวจ (n)</th><th class="n">ความชุก (%)</th><th class="n">95% CI (Wilson)</th><th style="width:34%">กราฟ</th></tr></thead><tbody>
         ${st.map(({ p, x, n, ci }) => `<tr><td><i>${esc(p.name)}</i></td><td class="n mono">${x}</td><td class="n mono">${n}</td><td class="n mono"><b>${pct(x / n)}</b></td><td class="n mono">${pct(ci[0])}–${pct(ci[1])}</td>
           <td><div class="cibar" title="${pct(x / n)}% (${pct(ci[0])}–${pct(ci[1])})"><i style="width:${(x / n * 100).toFixed(1)}%"></i><s style="left:${(ci[0] * 100).toFixed(1)}%;width:${((ci[1] - ci[0]) * 100).toFixed(1)}%"></s></div></td></tr>`).join('')}
         <tr><td><b>พบอย่างน้อย 1 ชนิด</b></td><td class="n mono"><b>${anyX}</b></td><td class="n mono">${n}</td><td class="n mono"><b>${pct(anyX / n)}</b></td><td class="n mono">${pct(anyCI[0])}–${pct(anyCI[1])}</td>
           <td><div class="cibar"><i style="width:${(anyX / n * 100).toFixed(1)}%"></i><s style="left:${(anyCI[0] * 100).toFixed(1)}%;width:${((anyCI[1] - anyCI[0]) * 100).toFixed(1)}%"></s></div></td></tr>
         </tbody></table></div>
-        <p class="small muted">แท่งสี = ความชุก · เส้นขอบ = ช่วงความเชื่อมั่น 95% · ความชุก = จำนวน Positive ÷ จำนวนที่ตรวจ × 100</p>
-        <p class="small muted">🔗 รวมข้อมูลอัตโนมัติ: กรอกเป็นชุด ${data.filter(r => !r._case).length} ตัว + เคสโครายตัวที่ลงผล Blood parasite แล้ว ${data.filter(r => r._case).length} ตัว · อัปเดตเองเมื่อมีคนลงผลเพิ่ม</p>
-      </div>` : '<div class="card empty">ยังไม่มีผล Blood parasite ตามตัวกรอง</div>'}
-      ${pcvCard}
-      <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">แยกตาม</h2>
-        <select id="bpBy" style="width:auto">${Object.entries(byLabel).map(([k, l]) => `<option value="${k}" ${k === by ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div class="tblwrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>${byLabel[by]}</th><th class="n">n</th>${PATHO.map(p => `<th class="n" title="${esc(p.name)}"><i>${esc(p.sh)}</i></th>`).join('')}<th class="n">≥1 ชนิด</th><th class="n">PCV เฉลี่ย</th><th class="n">โลหิตจาง</th></tr></thead><tbody>
-        ${groups.map(gv => { const A = all.filter(r => String(r[by] ?? '') === gv), L = A.filter(bpDone); const ax = L.filter(r => PATHO.some(p => isPos(r[p.k]))).length, q = pcvStats(A);
-          return `<tr><td>${esc(by === 'campDay' ? 'Day ' + gv : gv || '(ไม่ระบุ)')}</td><td class="n mono">${L.length}</td>${stat(L).map(({ x, n }) => `<td class="n mono ${x ? 'hl' : ''}">${x ? `${x} <span class="muted">(${pct(x / n)}%)</span>` : '0'}</td>`).join('')}<td class="n mono"><b>${ax}</b>${L.length ? ` (${pct(ax / L.length)}%)` : ''}</td><td class="n mono">${q ? q.mean.toFixed(1) + '% <span class="muted">(n=' + q.n + ')</span>' : '-'}</td><td class="n mono">${q ? `${q.an} (${pct(q.an / q.n)}%)` : '-'}</td></tr>`; }).join('')}
-        </tbody></table></div></div>
+        <p class="small muted">แท่งสี = ความชุก · เส้นขอบ = ช่วงความเชื่อมั่น 95% · ความชุก = จำนวน Positive ÷ จำนวนที่ตรวจ × 100</p>${src(data)}</div>
+      <div class="card">${bySel}
+        <div class="tblwrap" style="margin-top:8px"><table class="tbl"><thead><tr><th>${byLabel[by]}</th><th class="n">n</th>${PATHO.map(p => `<th class="n" title="${esc(p.name)}"><i>${esc(p.sh)}</i></th>`).join('')}<th class="n">≥1 ชนิด</th></tr></thead><tbody>
+        ${groups.map(gv => { const L = data.filter(r => String(r[by] ?? '') === gv); if (!L.length) return ''; const ax = L.filter(r => PATHO.some(p => isPos(r[p.k]))).length;
+          return `<tr><td>${gName(gv)}</td><td class="n mono">${L.length}</td>${stat(L).map(({ x, n }) => `<td class="n mono ${x ? 'hl' : ''}">${x ? `${x} <span class="muted">(${pct(x / n)}%)</span>` : '0'}</td>`).join('')}<td class="n mono"><b>${ax}</b> (${pct(ax / L.length)}%)</td></tr>`; }).join('')}
+        </tbody></table></div></div>`;
+    }
+    el.innerHTML = top + cattleFilterHTML(f) + (all.length ? body + `
       <div class="card"><h2>ส่งออกข้อมูล</h2><div class="row">
         <button class="btn" id="csvRaw">⬇ CSV รายตัว (1 แถว = 1 ตัว, SPSS)</button>
         <button class="btn" id="csvAnon">⬇ CSV รายตัว (ตัดชื่อเจ้าของ — สำหรับเผยแพร่)</button>
-        <button class="btn" id="csvSum">⬇ CSV สรุปความชุก</button></div>
-        <p class="small muted">ส่งออกตามตัวกรองด้านบน · ไฟล์เปิดใน Excel ภาษาไทยได้ · ค่า Positive = 1, Negative = 0 (ว่าง = ยังไม่ลงผล) · anemia = PCV &lt; ${ANEMIA_PCV}%</p></div>`
+        <button class="btn" id="csvSum">⬇ CSV สรุปผล (BP · PCV · plasma)</button></div>
+        <p class="small muted">ส่งออกตามตัวกรองด้านบน · 1 ไฟล์มีครบทั้ง Blood parasite, PCV และสี plasma · ไฟล์เปิดใน Excel ภาษาไทยได้ · ค่า Positive = 1, Negative = 0 (ว่าง = ยังไม่ลงผล) · anemia = PCV &lt; ${ANEMIA_PCV}%</p></div>`
       : `<div class="card empty">ยังไม่มีข้อมูลตามตัวกรอง — ลงผล Blood parasite / PCV / สี plasma ในเคสโค (ระบบดึงมาให้อัตโนมัติ) หรือไปที่แท็บ <a href="#/cattle/entry">กรอกเป็นชุด</a></div>`);
     bindCattleFilters(el, draw);
     const byEl = $('#bpBy', el); if (byEl) byEl.onchange = () => { store.set('bpBy', byEl.value); draw(); };
     const raw = anon => {
       const cols = ['sampleNo', 'campDay', 'date', 'unit', 'farmName', ...(anon ? [] : ['ownerName']), 'moo', 'animalId', 'species', 'age', 'sex', 'breed', 'method'];
-      downloadCSV(`bloodparasite_cattle${anon ? '_deid' : ''}_${todayStr()}.csv`, [...cols, ...PATHO.map(p => p.name), 'any_positive', 'pcv_pct', 'anemia_pcv_lt24', 'plasma_color', 'note', 'recorder'],
+      downloadCSV(`pbl_cattle${anon ? '_deid' : ''}_${todayStr()}.csv`, [...cols, ...PATHO.map(p => p.name), 'any_positive', 'pcv_pct', 'anemia_pcv_lt24', 'plasma_color', 'note', 'recorder'],
         all.map(r => [...cols.map(c => r[c]), ...PATHO.map(p => bpDone(r) ? (isPos(r[p.k]) ? 1 : 0) : ''), bpDone(r) ? (PATHO.some(p => isPos(r[p.k])) ? 1 : 0) : '',
           pcvOf(r) ?? '', pcvOf(r) === null ? '' : (isAnemic(r) ? 1 : 0), r.serumColor || '', r.note, r.recorder]));
     };
     if ($('#csvRaw', el) && all.length) {
       $('#csvRaw', el).onclick = () => raw(false);
       $('#csvAnon', el).onclick = () => raw(true);
-      $('#csvSum', el).onclick = () => downloadCSV(`bloodparasite_prevalence_${todayStr()}.csv`, ['pathogen', 'positive', 'n', 'prevalence_pct', 'ci95_low', 'ci95_high'],
-        [...st.map(({ p, x, n, ci }) => [p.name, x, n, pct(x / n), pct(ci[0]), pct(ci[1])]), ['Any (>=1)', anyX, n, n ? pct(anyX / n) : '', pct(anyCI[0]), pct(anyCI[1])],
+      $('#csvSum', el).onclick = () => downloadCSV(`pbl_cattle_summary_${todayStr()}.csv`, ['item', 'positive', 'n', 'pct', 'ci95_low', 'ci95_high'],
+        [...st.map(({ p, x, n, ci }) => [p.name, x, n, n ? pct(x / n) : '', pct(ci[0]), pct(ci[1])]), ['Any (>=1)', anyX, n, n ? pct(anyX / n) : '', pct(anyCI[0]), pct(anyCI[1])],
           ...(P ? [['Anemia (PCV<' + ANEMIA_PCV + '%)', P.an, P.n, pct(P.an / P.n), pct(P.ci[0]), pct(P.ci[1])], ['PCV mean (SD) %', P.mean.toFixed(1), P.n, 'SD ' + P.sd.toFixed(1), P.min, P.max]] : []),
           ...sItems.map(i => ['Plasma: ' + i.label, i.v, sr.length, pct(i.v / sr.length), '', ''])]);
     }
