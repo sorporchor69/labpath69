@@ -2191,12 +2191,13 @@ function downloadCSV(name, header, data) {
 }
 
 function VIEWS_cattle(el, tab) {
-  tab = ['entry', 'prev', 'pcv', 'plasma', 'list'].includes(tab) ? tab : 'prev';
-  const tabsHTML = `<nav class="tabs">${[['prev', '🩸 Blood parasite'], ['pcv', '📈 PCV / crit'], ['plasma', '🧪 สี plasma'], ['entry', '✍️ กรอกเป็นชุด'], ['list', '📋 รายการทั้งหมด']]
+  tab = ['entry', 'prev', 'pcv', 'plasma', 'ind', 'list'].includes(tab) ? tab : 'prev';
+  const tabsHTML = `<nav class="tabs">${[['prev', '🩸 Blood parasite'], ['pcv', '📈 PCV / crit'], ['plasma', '🧪 สี plasma'], ['ind', '🐄 ดูรายตัว'], ['entry', '✍️ กรอกเป็นชุด'], ['list', '📋 รายการทั้งหมด']]
     .map(([k, t]) => `<a href="#/cattle/${k}" class="${k === tab ? 'act' : ''}">${t}</a>`).join('')}</nav>`;
   const head = `<h1>PBL โค <span class="small muted">Blood parasite · PCV/crit · สี plasma — โคที่เก็บเลือดทุกตัวตรวจครบ 3 อย่าง</span></h1>`;
   if (tab === 'entry') return cattleEntry(el, head + tabsHTML);
   if (tab === 'list') return cattleList(el, head + tabsHTML);
+  if (tab === 'ind') return cattleInd(el, head + tabsHTML);
   return cattlePrev(el, head + tabsHTML, tab);
 }
 
@@ -2383,6 +2384,49 @@ function cattlePrev(el, top, mode = 'prev') {
           ...(P ? [['Anemia (PCV<' + ANEMIA_PCV + '%)', P.an, P.n, pct(P.an / P.n), pct(P.ci[0]), pct(P.ci[1])], ['PCV mean (SD) %', P.mean.toFixed(1), P.n, 'SD ' + P.sd.toFixed(1), P.min, P.max]] : []),
           ...sItems.map(i => ['Plasma: ' + i.label, i.v, sr.length, pct(i.v / sr.length), '', ''])]);
     }
+  };
+  draw();
+  currentView.refresh = draw;
+}
+
+/** ติดตามรายตัว: วัวแต่ละตัวมีเชื้ออะไร · crit เท่าไหร่ · สี plasma อะไร */
+function cattleInd(el, top) {
+  let q = store.get('bpIndQ', '');
+  const norm = v => String(v || '').toLowerCase().replace(/[-\s]/g, '');
+  const pend = '<span class="muted">ยังไม่ลงผล</span>';
+  const card = r => {
+    const ps = PATHO.filter(p => isPos(r[p.k])), v = pcvOf(r);
+    const ck = S.lists.serum_color || [], ci = ck.indexOf(r.serumColor);
+    const hex = SERUM_COLOR_HEX[(ci < 0 ? ck.length : ci) % SERUM_COLOR_HEX.length];
+    return `<div class="card" data-id="${esc(r.id)}" style="cursor:pointer;margin:0" title="แตะเพื่อดู/แก้ผล">
+      <div class="row" style="justify-content:space-between;gap:6px"><b class="mono">${esc(r.sampleNo || 'รอเลข')}</b><span class="small muted">Day ${esc(r.campDay)} · ${esc(r.species || '')}</span></div>
+      <div class="small muted">${esc(r.animalId || '-')} · ${esc(r.farmName || '')}${filled(r.age) ? ' · ' + esc(r.age) + ' ปี' : ''}${r.sex ? ' · ' + esc(r.sex) : ''}</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;margin-top:10px;align-items:center">
+        <span class="small">🩸 Blood parasite</span><span>${!bpDone(r) ? pend : ps.length ? ps.map(p => `<span class="badge pospill"><i>${esc(p.name)}</i></span>`).join(' ') : '<span class="badge" style="background:#e3f3e9;color:#1d5c38">ไม่พบเชื้อ</span>'}</span>
+        <span class="small">📈 PCV / crit</span><span>${v === null ? pend : `<b class="mono">${v}%</b> ${isAnemic(r) ? '<span class="badge pospill">โลหิตจาง ↓</span>' : '<span class="small muted">ปกติ (24–46%)</span>'}`}</span>
+        <span class="small">🧪 สี plasma</span><span>${!filled(r.serumColor) ? pend : `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${hex};border:1px solid #94a3b8;vertical-align:middle"></span> ${esc(r.serumColor)}`}</span>
+      </div></div>`;
+  };
+  const draw = () => {
+    const f = cattleFilters();
+    el.innerHTML = top + cattleFilterHTML(f) + `<div class="card"><div class="fld"><label for="indQ">ค้นหาวัว: เลขตัวอย่าง / หมายเลขสัตว์ (ear tag) / ฟาร์ม / เจ้าของ</label>
+        <input id="indQ" type="search" value="${esc(q)}" placeholder="เช่น 1-LA-04-001 หรือ TH-1001" autocomplete="off"></div><p class="small muted" id="indN" style="margin:6px 0 0"></p></div>
+      <div id="indList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px"></div>`;
+    const list = () => {
+      const all = cattleFiltered(cattleFilters()).sort((a, b) => String(a.sampleNo || '~').localeCompare(String(b.sampleNo || '~'), 'th', { numeric: true }));
+      const k = norm(q), L = k ? all.filter(r => [r.sampleNo, r.animalId, r.farmName, r.ownerName].some(v => norm(v).includes(k))) : all;
+      const done3 = L.filter(r => bpDone(r) && pcvOf(r) !== null && filled(r.serumColor)).length;
+      $('#indN', el).textContent = `${L.length} ตัว · ลงผลครบ 3 อย่างแล้ว ${done3} ตัว${L.length > 300 ? ' (แสดง 300 ตัวแรก)' : ''}`;
+      $('#indList', el).innerHTML = L.slice(0, 300).map(card).join('') || '<div class="card empty">ไม่พบวัวตามเงื่อนไข</div>';
+      $$('[data-id]', $('#indList', el)).forEach(c => c.onclick = () => {
+        const id = c.dataset.id, r = id.startsWith('case:') ? null : getRec('BloodParasite_Cattle', id);
+        const cid = id.startsWith('case:') ? id.slice(5) : (r && r.caseId);
+        if (cid) go('#/case/' + encodeURIComponent(cid) + '/pcv'); else editCattle(id, draw);
+      });
+    };
+    let t; $('#indQ', el).oninput = e => { q = e.target.value; store.set('bpIndQ', q); clearTimeout(t); t = setTimeout(list, 150); };
+    bindCattleFilters(el, draw);
+    list();
   };
   draw();
   currentView.refresh = draw;
