@@ -911,7 +911,7 @@ document.addEventListener('change', async e => {
     msg.textContent = `กำลังอัปโหลด ${i + 1}/${files.length}…`;
     try {
       const data = await shrinkImage(f);
-      const r = await api('uploadPhoto', { caseId: form.dataset.case, sec: 'kit', data, mime: 'image/jpeg' }, 90000);
+      const r = await api('uploadPhoto', { caseId: form.dataset.case, sec: k.replace(/_photos$/, ''), data, mime: 'image/jpeg' }, 90000);
       if (!r.ok) throw new Error(r.message || 'อัปโหลดไม่สำเร็จ');
       hid.value = [...photoIds(hid.value), r.id].join('; '); ok++;
     } catch (err) { toast((err.network ? 'ต้องออนไลน์จึงอัปโหลดรูปได้ — ' : '') + err.message, 'err', 6000); }
@@ -1565,21 +1565,37 @@ const FL = { type:'chips', opts:['F','L'], label:'ทำที่ (F = ภาค
 const KIT = { type:'chips', list:'kit_result' };
 const DIFF = [['neu','Neutrophils'],['lym','Lymphocytes'],['mono','Monocytes'],['eos','Eosinophils'],['baso','Basophils'],['band','Bands'],['blast','Blasts']]
   .map(([k, l]) => ({ k, label: l + ' (%)', type:'num', diff:true }));
+const VS_SRC = ['VetScan HM5', 'นับเอง / smear'];
+const VS_ABS = [['lym_abs', 'LYM', 'lyma', 'lym'], ['mon_abs', 'MON', 'mona', 'mono'], ['neu_abs', 'NEU', 'neua', 'neu'], ['eos_abs', 'EOS', 'eosa', 'eos'], ['bas_abs', 'BAS', 'basa', 'baso']];
+const QC_IDX = ['0', '1+', '2+', '3+'];
 const SECTIONS = {
   SA: {
+    // เรียงตามใบผล VetScan HM5 บนลงล่าง · vs = แสดงเฉพาะเมื่อเลือก "VetScan HM5"
     blood: [ { k:'blood_setting', ...FL },
-      { k:'hct', label:'Hct (%)', type:'num', ref:'hct' }, { k:'tp', label:'Total protein (g/dL)', type:'num', ref:'tp' },
-      { k:'rbc', label:'RBC (×10⁶/µL)', type:'num', ref:'rbc' }, { k:'wbc', label:'WBC (×10³/µL)', type:'num', ref:'wbc' },
-      ...DIFF,
+      { k:'cbc_src', label:'ผล CBC มาจาก', type:'chips', opts:VS_SRC, w:'full' },
+      { k:'wbc', label:'WBC (×10³/µL)', type:'num', ref:'wbc' },
+      ...VS_ABS.map(([k, l, r]) => ({ k, label: l + ' (×10³/µL)', type:'num', ref:r, vs:true })),
+      ...['lym', 'mono', 'neu', 'eos', 'baso', 'band', 'blast'].map(k => DIFF.find(f => f.k === k)),
+      { k:'rbc', label:'RBC (×10⁶/µL)', type:'num', ref:'rbc' }, { k:'hgb', label:'HGB (g/dL)', type:'num', ref:'hgb', vs:true },
+      { k:'hct', label:'HCT (%)', type:'num', ref:'hct' }, { k:'mcv', label:'MCV (fL)', type:'num', ref:'mcv', vs:true },
+      { k:'mch', label:'MCH (pg)', type:'num', ref:'mch', vs:true }, { k:'mchc', label:'MCHC (g/dL)', type:'num', ref:'mchc', vs:true },
+      { k:'rdw', label:'RDWc (%)', type:'num', vs:true },
+      { k:'platelet', label:'PLT — Platelet (×10³/µL)', type:'num', ref:'plt' }, { k:'mpv', label:'MPV (fL)', type:'num', vs:true },
+      { k:'tp', label:'TP (g/dL) — refractometer (ค่าจากเครื่อง chem กรอกที่แท็บ Chemistry)', type:'num', ref:'tp' },
       { k:'poikilocyte', label:'Poikilocyte', type:'chips', list:'poikilocyte' }, { k:'poikilocyteType', label:'ชนิด Poikilocyte', type:'text' },
-      { k:'platelet', label:'Platelet (×10³/µL)', type:'num', ref:'plt' }, { k:'retic', label:'Reticulocyte count', type:'text' },
+      { k:'retic', label:'Reticulocyte count', type:'text' },
+      { k:'cbc_photos', label:'รูปใบผล CBC (ถ่ายเก็บไว้ตรวจย้อนหลัง)', type:'photos', w:'full' },
       { k:'sat', label:'Saline agglutination (SAT)', type:'chips', opts:['Positive','Negative'] },
       { k:'cbcInterp', label:'CBC interpretation', type:'area', w:'full' } ],
     chem: [ { k:'chem_setting', ...FL },
-      { k:'chem_bun', label:'BUN (mg/dL)', type:'num', ref:'bun' }, { k:'chem_crea', label:'Creatinine (mg/dL)', type:'num', ref:'crea' },
-      { k:'chem_alt', label:'ALT (U/L)', type:'num', ref:'alt' }, { k:'chem_alp', label:'ALP (U/L)', type:'num', ref:'alp' },
-      { k:'chem_tp', label:'Total protein (g/dL)', type:'num', ref:'tp' }, { k:'chem_alb', label:'Albumin (g/dL)', type:'num', ref:'alb' },
-      { k:'chem_glob', label:'Globulin (g/dL)', type:'num', ref:'glob' }, { k:'chem_glu', label:'Glucose (mg/dL)', type:'num', ref:'glu' },
+      // เรียงตามใบผล VetScan VS2 (Prep Profile II): ALP → ALT → BUN → CRE → GLU → TP
+      { k:'chem_alp', label:'ALP (U/L)', type:'num', ref:'alp' }, { k:'chem_alt', label:'ALT (U/L)', type:'num', ref:'alt' },
+      { k:'chem_bun', label:'BUN (mg/dL)', type:'num', ref:'bun' }, { k:'chem_crea', label:'CRE — Creatinine (mg/dL)', type:'num', ref:'crea' },
+      { k:'chem_glu', label:'GLU — Glucose (mg/dL)', type:'num', ref:'glu' }, { k:'chem_tp', label:'TP — Total protein (g/dL) จากเครื่อง chemistry', type:'num', ref:'tp' },
+      { k:'chem_alb', label:'Albumin (g/dL) — ถ้ามี', type:'num', ref:'alb' }, { k:'chem_glob', label:'Globulin (g/dL) — ถ้ามี', type:'num', ref:'glob' },
+      { k:'chem_hem', label:'HEM (hemolysis)', type:'chips', opts:QC_IDX }, { k:'chem_lip', label:'LIP (lipemia)', type:'chips', opts:QC_IDX },
+      { k:'chem_ict', label:'ICT (icterus)', type:'chips', opts:QC_IDX },
+      { k:'chem_photos', label:'รูปใบผล chemistry (ถ่ายเก็บไว้ตรวจย้อนหลัง)', type:'photos', w:'full' },
       { k:'bloodChem', label:'ค่าอื่น ๆ (เช่น Phosphorus, Bilirubin, Cholesterol)', type:'text', w:'full' },
       { k:'chemInterp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
     bp: [ { k:'bp_setting', ...FL }, { k:'bp_method', label:'Method', type:'multi', list:'bp_method_SA', w:'full' },
@@ -1645,14 +1661,16 @@ const secFields = (g, k) => (SECTIONS[g === 'LA' ? 'LA' : 'SA'][k] || []);
 /** ค่าอ้างอิงโดยประมาณ (ใช้เตือน ↑↓ สีเหลือง ไม่บล็อกการบันทึก) — ปรับตามตำราที่ฝ่ายใช้ได้ */
 const REF = {
   'สุนัข': { hct:[37,55], tp:[5.4,7.5], rbc:[5.5,8.5], wbc:[6,17], plt:[200,500], usg:[1.015,1.045],
-    bun:[7,27], crea:[0.5,1.8], alt:[10,100], alp:[20,150], alb:[2.5,4.0], glob:[2.0,4.5], glu:[70,140] },
+    bun:[7,27], crea:[0.5,1.8], alt:[10,100], alp:[20,150], alb:[2.5,4.0], glob:[2.0,4.5], glu:[70,140],
+    hgb:[12,18], mcv:[60,77], mch:[19.5,24.5], mchc:[32,36], lyma:[1.0,4.8], mona:[0.15,1.35], neua:[3.0,11.5], eosa:[0.1,1.25], basa:[0,0.1] },
   'แมว':  { hct:[30,45], tp:[6.0,8.0], rbc:[5,10], wbc:[5.5,19.5], plt:[300,800], usg:[1.035,1.060],
-    bun:[16,36], crea:[0.8,2.4], alt:[12,130], alp:[14,111], alb:[2.5,3.9], glob:[2.5,5.0], glu:[70,150] },
+    bun:[16,36], crea:[0.8,2.4], alt:[12,130], alp:[14,111], alb:[2.5,3.9], glob:[2.5,5.0], glu:[70,150],
+    hgb:[8,15], mcv:[39,55], mch:[12.5,17.5], mchc:[30,36], lyma:[1.5,7.0], mona:[0,0.85], neua:[2.5,12.5], eosa:[0,1.5], basa:[0,0.1] },
   'โค':   { hct:[24,46], tp:[7.0,8.5], rbc:[5,10], wbc:[4,12], plt:[100,800],
     bun:[6,27], crea:[1.0,2.0], ast:[60,125], ggt:[15,40], alb:[2.7,3.8], glob:[3.0,4.8], glu:[45,75] }
 };
 const refFor = c => REF[c.species] || (c.animalGroup === 'LA' ? REF['โค'] : null);
-const HARD = { hct:[0,80], tp:[0,15], ur_usg:[1.000,1.080] }; // เกินช่วงนี้ = เป็นไปไม่ได้ → ห้ามบันทึก
+const HARD = { hct:[0,80], tp:[0,15], ur_usg:[1.000,1.080], hgb:[0,30], mchc:[0,60], mcv:[0,200], mch:[0,80], wbc:[0,500], rbc:[0,25] }; // เกินช่วงนี้ = เป็นไปไม่ได้ → ห้ามบันทึก
 
 /** แถวผลแลปของเคส (1 แถว/เคส) */
 function resultRow(c) {
@@ -1664,7 +1682,7 @@ function hasData(g, sec, row) {
   if (!row) return false;
   const t = TESTS.find(x => x.k === sec);
   // โค: Hct ใช้ร่วมกับ PCV → แท็บ Blood (CBC) นับว่าลงผลเมื่อมีค่าอื่นนอกจาก Hct
-  return secFields(g, sec).some(f => f.k !== t.set && !(g === 'LA' && sec === 'blood' && f.k === 'hct') && filled(row[f.k]));
+  return secFields(g, sec).some(f => f.k !== t.set && f.k !== 'cbc_src' && !(g === 'LA' && sec === 'blood' && f.k === 'hct') && filled(row[f.k]));
 }
 function isPositive(g, sec, row) {
   if (!row) return false;
@@ -1688,7 +1706,7 @@ function summarize(g, sec, row, c) {
   };
   const first = s => String(s || '').split('\n')[0];
   switch (sec) {
-    case 'blood': return [num('hct', 'Hct', '%', 'hct'), num('tp', 'TP', '', 'tp'), num('wbc', 'WBC', '', 'wbc'), num('platelet', 'PLT', '', 'plt'),
+    case 'blood': return [num('hct', 'Hct', '%', 'hct'), num('hgb', 'HGB', '', 'hgb'), num('tp', 'TP', '', 'tp'), num('wbc', 'WBC', '', 'wbc'), num('platelet', 'PLT', '', 'plt'),
       filled(r.sat) ? 'SAT ' + r.sat : '', first(r.cbcInterp || r.blood_interp)].filter(Boolean).join(' · ');
     case 'chem': return [num('chem_bun', 'BUN', '', 'bun'), num('chem_crea', 'Crea', '', 'crea'), num('chem_alt', 'ALT', '', 'alt'), num('chem_ast', 'AST', '', 'ast'),
       num('chem_alp', 'ALP', '', 'alp'), num('chem_ggt', 'GGT', '', 'ggt'), num('chem_alb', 'Alb', '', 'alb'), num('chem_glu', 'Glu', '', 'glu'),
@@ -1749,6 +1767,41 @@ function sectionFormHTML(c, sec, row, ro) {
       : `<div class="formbar"><button class="btn pri big" type="submit" style="flex:1">💾 บันทึกผล ${esc(t.short)}</button>${row && hasData(g, sec, row) ? '<button class="btn danger" type="button" id="secClear">🗑 ลบผลการตรวจนี้</button>' : ''}</div>`}
   </form>`;
 }
+/** CBC จาก VetScan HM5: ซ่อน/แสดงช่องตามแหล่งผล · คำนวณ % จากค่า ×10³/µL · เช็กค่าที่น่าจะพิมพ์ผิด (เตือนเฉย ๆ ไม่บล็อก) */
+function vetscanLive(form, target) {
+  const box = $('[data-chips="cbc_src"]', form); if (!box) return;
+  const src = ($('input:checked', box) || {}).value || '';
+  const vs = src !== VS_SRC[1];
+  SECTIONS.SA.blood.filter(f => f.vs).forEach(f => { const el = $(`.fld[data-k="${f.k}"]`, form); if (el) el.style.display = vs ? '' : 'none'; });
+  const val = k => { const el = $(`[name="${k}"]`, form); const v = el ? el.value.trim() : ''; return v === '' || !isFinite(Number(v)) ? null : Number(v); };
+  // VetScan: ช่อง % คำนวณจากค่า ×10³/µL เอง (ล็อกไว้ ไม่ต้องกรอกซ้ำ) · Bands/Blasts เครื่องไม่นับ → ซ่อนถ้าว่าง
+  const auto = vs && !!src;
+  VS_ABS.forEach(a => { const el = $(`[name="${a[3]}"]`, form); if (el) { el.readOnly = auto; el.style.background = auto ? 'var(--surface-2)' : ''; } });
+  ['band', 'blast'].forEach(k => { const el = $(`[name="${k}"]`, form), b = $(`.fld[data-k="${k}"]`, form); if (b) b.style.display = auto && !(el && el.value.trim()) ? 'none' : ''; });
+  if (auto) {
+    const abs = VS_ABS.map(a => val(a[0]));
+    const tot = abs.every(v => v !== null) ? abs.reduce((a, b) => a + b, 0) : val('wbc');
+    VS_ABS.forEach(([, , , pk], i) => {
+      const el = $(`[name="${pk}"]`, form); if (!el) return;
+      el.value = abs[i] === null || !tot ? '' : String(Math.round(abs[i] / tot * 1000) / 10);
+    });
+  }
+  let note = $('#vsCheck', form);
+  if (!note) { note = document.createElement('div'); note.id = 'vsCheck'; note.className = 'small'; note.style.marginTop = '8px'; const ds = $('#diffSum', form); (ds || $('fieldset', form)).after(note); }
+  const w = [], wbc = val('wbc'), hgb = val('hgb'), hct = val('hct'), mchc = val('mchc');
+  const absAll = VS_ABS.map(a => val(a[0]));
+  if (vs && wbc && absAll.every(v => v !== null)) {
+    const sum = Math.round(absAll.reduce((a, b) => a + b, 0) * 100) / 100;
+    if (Math.abs(sum - wbc) > Math.max(0.15, wbc * 0.05)) w.push(`LYM+MON+NEU+EOS+BAS = ${sum} แต่ WBC = ${wbc} — ควรใกล้กัน ลองเช็กว่าพิมพ์ถูกช่อง`);
+  }
+  if (hgb && hct) {
+    const r = hct / hgb;
+    if (r < 2.4 || r > 3.8) w.push(`HCT (${hct}) ควรประมาณ 3 เท่าของ HGB (${hgb}) — เช็กว่าพิมพ์จุดทศนิยมถูกไหม`);
+    else if (mchc && Math.abs(hgb / hct * 100 - mchc) > 3) w.push(`MCHC ที่กรอก (${mchc}) ไม่ตรงกับ HGB ÷ HCT × 100 (${(hgb / hct * 100).toFixed(1)})`);
+  }
+  note.innerHTML = (auto ? '<div class="muted">ช่อง % ของ differential คำนวณให้อัตโนมัติจากค่า ×10³/µL — ไม่ต้องกรอก · ↑ ↓ สีเหลืองคือนอกช่วงอ้างอิงโดยประมาณ — ดูเครื่องหมาย + / − บนใบผลประกอบ</div>' : '')
+    + w.map(x => `<div class="alert warn small" style="margin-top:6px">⚠️ ${esc(x)}</div>`).join('');
+}
 function bindSectionForm(root, c, sec, onSaved, setDirty) {
   const g = c.animalGroup === 'LA' ? 'LA' : 'SA';
   const fs = secFields(g, sec);
@@ -1765,7 +1818,9 @@ function bindSectionForm(root, c, sec, onSaved, setDirty) {
     form.insertAdjacentHTML('afterbegin', '<div class="alert info small">กู้คืนค่าที่พิมพ์ค้างไว้ (ยังไม่ได้บันทึก)</div>');
   }
   // ค่าอ้างอิง + ↑↓ + ผลรวม differential แบบสด
+  let lastTarget = null;
   const live = () => {
+    if (fs.some(f => f.k === 'cbc_src')) vetscanLive(form, lastTarget);
     fs.filter(f => f.ref || HARD[f.k]).forEach(f => {
       const box = $(`.fld[data-k="${f.k}"]`, form); if (!box) return;
       let hint = $('.refhint', box); if (!hint) { hint = document.createElement('div'); hint.className = 'refhint small'; box.appendChild(hint); }
@@ -1787,8 +1842,8 @@ function bindSectionForm(root, c, sec, onSaved, setDirty) {
     }
   };
   live();
-  form.addEventListener('input', () => { live(); setDirty && setDirty(true); store.set(dkey, readForm(form, fs)); });
-  form.addEventListener('change', () => { setDirty && setDirty(true); store.set(dkey, readForm(form, fs)); });
+  form.addEventListener('input', e => { lastTarget = e.target; live(); lastTarget = null; setDirty && setDirty(true); store.set(dkey, readForm(form, fs)); });
+  form.addEventListener('change', e => { if (e.target.closest('[data-chips="cbc_src"]')) setTimeout(live, 0); setDirty && setDirty(true); store.set(dkey, readForm(form, fs)); });
   form.onsubmit = async e => {
     e.preventDefault();
     const vals = readForm(form, fs);
@@ -2816,7 +2871,7 @@ function printCase(c) {
     return Number(v) < lo ? ' ↓' : Number(v) > hi ? ' ↑' : '';
   };
   const secHTML = t => {
-    const fs = secFields(g, t.k).filter(f => f.k !== t.set && filled(row[f.k]));
+    const fs = secFields(g, t.k).filter(f => f.k !== t.set && f.type !== 'photos' && filled(row[f.k]));
     const long = fs.filter(f => f.type === 'area'), short = fs.filter(f => f.type !== 'area');
     const cells = short.map(f => `<td class="k">${esc(f.label)}</td><td class="v">${esc(row[f.k])}${flag(f, row[f.k])}${f.ref && ref && ref[f.ref] ? `<span class="rr">(${ref[f.ref][0]}–${ref[f.ref][1]})</span>` : ''}</td>`);
     const trs = []; for (let i = 0; i < cells.length; i += 2) trs.push(`<tr>${cells[i]}${cells[i + 1] || '<td class="k"></td><td class="v"></td>'}</tr>`);
