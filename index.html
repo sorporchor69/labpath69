@@ -861,7 +861,7 @@ function fieldHTML(f, val, ro) {
     case 'photos':
       return wrap(`<div class="lab">${esc(f.label)}</div><input type="hidden" name="${f.k}" value="${esc(val)}">
         <div class="photos" data-photos="${f.k}">${photoThumbs(val, ro)}</div>
-        ${ro ? '' : `<label class="btn" style="margin-top:6px"><input type="file" accept="image/*" capture="environment" multiple data-photo-for="${f.k}" style="display:none">📷 ถ่ายรูป / แนบรูป</label> <span class="small muted" data-photo-msg="${f.k}"></span>`}`);
+        ${ro ? '' : `<label class="btn" style="margin-top:6px"><input type="file" accept="image/*" capture="environment" multiple data-photo-for="${f.k}" style="display:none">${f.ocr ? '📷 ถ่ายรูปใบผล → กรอกให้อัตโนมัติ' : '📷 ถ่ายรูป / แนบรูป'}</label> <span class="small muted" data-photo-msg="${f.k}"></span>`}`);
     case 'area':
       return wrap(`${lab}<textarea id="${id}" name="${f.k}" ${dis}>${esc(val)}</textarea>`);
     case 'select':
@@ -878,6 +878,66 @@ function fieldHTML(f, val, ro) {
     }
   }
   return '';
+}
+/* ---------- อ่านใบผล VetScan จากรูป (ข้อความจาก Google OCR ฝั่งเซิร์ฟเวอร์) ---------- */
+const OCR_FIELDS = {
+  cbc_photos: [['wbc', /\bWBC\b/], ['lym_abs', /\bLYM\b(?!\s*%)/], ['mon_abs', /\bMON\b(?!\s*%)/], ['neu_abs', /\bNEU\b(?!\s*%)/],
+    ['eos_abs', /\bEOS\b(?!\s*%)/], ['bas_abs', /\bBAS\b(?!\s*%)/], ['rbc', /\bRBC\b/], ['hgb', /\bHGB\b/], ['hct', /\bHCT\b/],
+    ['mcv', /\bMCV\b/], ['mch', /\bMCH\b(?!C)/], ['mchc', /\bMCHC\b/], ['rdw', /\bRDW\s*c\b/i], ['platelet', /\bPLT\b/], ['mpv', /\bMPV\b/]],
+  chem_photos: [['chem_alp', /\bALP\b/], ['chem_alt', /\bALT\b/], ['chem_bun', /\bBUN\b/], ['chem_crea', /\bCREA?\b/], ['chem_glu', /\bGLU\b/],
+    ['chem_tp', /\bTP\b/], ['chem_alb', /\bALB\b/], ['chem_glob', /\bGLOB\b/]]
+};
+/** ข้อความ OCR → { ค่า: {k: ตัวเลข}, qc: {k: '0'..'3+'}, pid } — อ่านทีละบรรทัด: ชื่อค่า แล้วตัวเลขตัวแรกที่ตามมา */
+function parseVetscan(text, key) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/,(\d)/g, '.$1').replace(/[Oo](?=\.\d)/g, '0').trim()).filter(Boolean);
+  const out = {}, qc = {};
+  (OCR_FIELDS[key] || []).forEach(([k, re]) => {
+    for (const l of lines) {
+      const m = l.match(re); if (!m) continue;
+      const rest = l.slice(m.index + m[0].length);
+      if (/^\s*%/.test(rest)) continue;
+      const n = rest.match(/^[^\d\n]{0,12}?(\d+(?:\.\d+)?)/);
+      if (n) { out[k] = Number(n[1]); break; }
+    }
+  });
+  if (key === 'chem_photos') [['chem_hem', 'HEM'], ['chem_lip', 'LIP'], ['chem_ict', 'ICT']].forEach(([k, lab]) => {
+    const m = String(text).match(new RegExp('\\b' + lab + '\\s*([0-3])\\s*(\\+?)'));
+    if (m) qc[k] = m[1] === '0' ? '0' : m[1] + '+';
+  });
+  const pm = String(text).match(/Patient\s*ID\s*[:.]?\s*([^\n]*)/i);
+  return { vals: out, qc, pid: pm ? pm[1].trim() : '' };
+}
+/** เติมค่าที่อ่านได้ลงฟอร์ม: ช่องว่างเติมให้ (ไฮไลต์ฟ้า) · ช่องที่มีค่าอื่นอยู่แล้วไม่ทับ แต่แจ้งให้ดู */
+function applyOcr(form, key, text, msg) {
+  const p = parseVetscan(text, key);
+  const filledK = [], diff = [];
+  Object.entries(p.vals).forEach(([k, v]) => {
+    const el = $(`[name="${k}"]`, form); if (!el) return;
+    if (HARD[k] && (v < HARD[k][0] || v > HARD[k][1])) return;
+    const cur = el.value.trim();
+    if (cur === '') { el.value = String(v); el.style.background = '#e0f2fe'; el.title = 'อ่านจากรูป — ตรวจเทียบกับใบผล'; filledK.push(k); }
+    else if (Number(cur) !== v) diff.push(`${fieldLabel(k)}: ในช่อง ${cur} · ในรูป ${v}`);
+  });
+  Object.entries(p.qc).forEach(([k, v]) => {
+    const box = $(`[data-chips="${k}"]`, form); if (!box || $$('input:checked', box).length) return;
+    $$('input', box).forEach(i => i.checked = i.value === v); filledK.push(k);
+  });
+  if (key === 'cbc_photos' && filledK.length) {
+    const box = $('[data-chips="cbc_src"]', form);
+    if (box && !$$('input:checked', box).length) { const i = $$('input', box).find(x => x.value === VS_SRC[0]); if (i) i.checked = true; }
+  }
+  const c = (rows('Cases') || []).find(x => x.id === form.dataset.case);
+  const norm = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const pidWarn = p.pid && c && c.sampleNo && norm(p.pid) && !norm(p.pid).includes(norm(c.sampleNo)) && !norm(c.sampleNo).includes(norm(p.pid))
+    ? `Patient ID บนใบคือ "${p.pid}" ไม่ตรงกับ HN ${c.sampleNo} — เช็กว่าเป็นใบของตัวนี้` : '';
+  if (filledK.length) form.dispatchEvent(new Event('input', { bubbles: true }));
+  const total = (OCR_FIELDS[key] || []).length;
+  msg.innerHTML = (filledK.length
+    ? `<b style="color:var(--ok)">อ่านจากรูปได้ ${filledK.length} ค่า</b> (ช่องสีฟ้า) — <b>เทียบกับใบผลทุกช่องก่อนกดบันทึก</b>`
+    : `<b style="color:var(--err)">อ่านค่าจากรูปไม่ได้</b> — ถ่ายใหม่ให้ตรง เห็นทั้งใบ ไม่มีเงา หรือกรอกเอง`)
+    + (filledK.length && Object.keys(p.vals).length < total - 3 && key === 'cbc_photos' ? '<br>บางค่าอ่านไม่ได้ — กรอกช่องที่เหลือเอง' : '')
+    + diff.map(d => `<br>⚠️ ไม่ได้ทับค่าเดิม — ${esc(d)}`).join('')
+    + (pidWarn ? `<br>⚠️ ${esc(pidWarn)}` : '');
 }
 /* ---------- รูปผลแลป (เก็บใน Google Drive ผ่าน Apps Script) ---------- */
 const photoIds = v => splitMulti(v).filter(x => /^[\w-]{10,}$/.test(x));
@@ -906,18 +966,20 @@ document.addEventListener('change', async e => {
   const form = inp.closest('form'), k = inp.dataset.photoFor, hid = $(`[name="${k}"]`, form), msg = $(`[data-photo-msg="${k}"]`, form);
   const files = [...inp.files]; inp.value = '';
   if (!files.length || !form || !form.dataset.case) return;
-  let ok = 0;
+  let ok = 0; const ocr = !!OCR_FIELDS[k], texts = [];
   for (const [i, f] of files.entries()) {
-    msg.textContent = `กำลังอัปโหลด ${i + 1}/${files.length}…`;
+    msg.textContent = `กำลังอัปโหลด${ocr ? 'และอ่านค่า' : ''} ${i + 1}/${files.length}…`;
     try {
       const data = await shrinkImage(f);
-      const r = await api('uploadPhoto', { caseId: form.dataset.case, sec: k.replace(/_photos$/, ''), data, mime: 'image/jpeg' }, 90000);
+      const r = await api('uploadPhoto', { caseId: form.dataset.case, sec: k.replace(/_photos$/, ''), data, mime: 'image/jpeg', ocr }, 120000);
       if (!r.ok) throw new Error(r.message || 'อัปโหลดไม่สำเร็จ');
       hid.value = [...photoIds(hid.value), r.id].join('; '); ok++;
+      if (r.text) texts.push(r.text); else if (ocr && r.ocrError) toast('อ่านค่าจากรูปไม่ได้: ' + r.ocrError, 'warn', 6000);
     } catch (err) { toast((err.network ? 'ต้องออนไลน์จึงอัปโหลดรูปได้ — ' : '') + err.message, 'err', 6000); }
   }
   $(`[data-photos="${k}"]`, form).innerHTML = photoThumbs(hid.value, false);
   msg.textContent = ok ? `อัปโหลดแล้ว ${ok} รูป — กด "บันทึกผล" เพื่อเก็บ` : '';
+  if (ocr && texts.length) applyOcr(form, k, texts.join('\n'), msg);
   if (ok) form.dispatchEvent(new Event('input', { bubbles: true }));
 }, true);
 document.addEventListener('click', e => {
@@ -1584,7 +1646,7 @@ const SECTIONS = {
       { k:'tp', label:'TP (g/dL) — refractometer (ค่าจากเครื่อง chem กรอกที่แท็บ Chemistry)', type:'num', ref:'tp' },
       { k:'poikilocyte', label:'Poikilocyte', type:'chips', list:'poikilocyte' }, { k:'poikilocyteType', label:'ชนิด Poikilocyte', type:'text' },
       { k:'retic', label:'Reticulocyte count', type:'text' },
-      { k:'cbc_photos', label:'รูปใบผล CBC (ถ่ายเก็บไว้ตรวจย้อนหลัง)', type:'photos', w:'full' },
+      { k:'cbc_photos', label:'รูปใบผล CBC — ถ่ายแล้วเว็บอ่านค่าให้อัตโนมัติ', type:'photos', w:'full', ocr:true },
       { k:'sat', label:'Saline agglutination (SAT)', type:'chips', opts:['Positive','Negative'] },
       { k:'cbcInterp', label:'CBC interpretation', type:'area', w:'full' } ],
     chem: [ { k:'chem_setting', ...FL },
@@ -1595,7 +1657,7 @@ const SECTIONS = {
       { k:'chem_alb', label:'Albumin (g/dL) — ถ้ามี', type:'num', ref:'alb' }, { k:'chem_glob', label:'Globulin (g/dL) — ถ้ามี', type:'num', ref:'glob' },
       { k:'chem_hem', label:'HEM (hemolysis)', type:'chips', opts:QC_IDX }, { k:'chem_lip', label:'LIP (lipemia)', type:'chips', opts:QC_IDX },
       { k:'chem_ict', label:'ICT (icterus)', type:'chips', opts:QC_IDX },
-      { k:'chem_photos', label:'รูปใบผล chemistry (ถ่ายเก็บไว้ตรวจย้อนหลัง)', type:'photos', w:'full' },
+      { k:'chem_photos', label:'รูปใบผล chemistry — ถ่ายแล้วเว็บอ่านค่าให้อัตโนมัติ', type:'photos', w:'full', ocr:true },
       { k:'bloodChem', label:'ค่าอื่น ๆ (เช่น Phosphorus, Bilirubin, Cholesterol)', type:'text', w:'full' },
       { k:'chemInterp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
     bp: [ { k:'bp_setting', ...FL }, { k:'bp_method', label:'Method', type:'multi', list:'bp_method_SA', w:'full' },
