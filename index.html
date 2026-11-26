@@ -844,6 +844,7 @@ function fieldLabel(k) {
 const optsOf = f => f.opts || S.lists[f.list] || [];
 
 function fieldHTML(f, val, ro) {
+  if (f.fix) val = f.fix(val);
   const id = 'f_' + f.k, dis = ro ? 'disabled' : '';
   const lab = `<label for="${id}">${esc(f.label)}${f.req ? '<span class="req" aria-hidden="true">*</span>' : ''}</label>`;
   const wrap = inner => `<div class="fld ${f.w || ''}" data-k="${f.k}">${inner}</div>`;
@@ -861,7 +862,9 @@ function fieldHTML(f, val, ro) {
     case 'photos':
       return wrap(`<div class="lab">${esc(f.label)}</div><input type="hidden" name="${f.k}" value="${esc(val)}">
         <div class="photos" data-photos="${f.k}">${photoThumbs(val, ro)}</div>
-        ${ro ? '' : `<label class="btn" style="margin-top:6px"><input type="file" accept="image/*" capture="environment" multiple data-photo-for="${f.k}" style="display:none">${f.ocr ? '📷 ถ่ายรูปใบผล → กรอกให้อัตโนมัติ' : '📷 ถ่ายรูป / แนบรูป'}</label> <span class="small muted" data-photo-msg="${f.k}"></span>`}`);
+        ${ro ? '' : `${f.ocr ? '<div class="small muted" style="margin-top:4px">ถ่ายหรือแนบรูปใบผล แล้วเว็บอ่านค่าให้อัตโนมัติ</div>' : ''}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">` +
+          `<label class="btn"><input type="file" accept="image/*" capture="environment" multiple data-photo-for="${f.k}" style="display:none">📷 ถ่ายรูป</label>` +
+          `<label class="btn"><input type="file" accept="image/*" multiple data-photo-for="${f.k}" style="display:none">🖼 แนบรูปจากเครื่อง</label></div> <span class="small muted" data-photo-msg="${f.k}"></span>`}`);
     case 'area':
       return wrap(`${lab}<textarea id="${id}" name="${f.k}" ${dis}>${esc(val)}</textarea>`);
     case 'select':
@@ -1613,11 +1616,16 @@ function cattleTests(v) {
   v.tests = t.join('; ');
   return v;
 }
-const testByLabel = l => TESTS.find(t => t.label === l || t.short === l || t.k === l || (t.alias || []).includes(l));
+/** ตอนส่งตัวอย่าง: Blood (CBC) + Blood chemistry รวมเป็นตัวเลือกเดียว (ผลยังแยกแท็บ Blood / Chemistry) */
+const BLOOD_ALL = 'Blood (CBC + Chemistry)';
+const testOpts = g => testsFor(g).filter(t => t.k !== 'chem').map(t => t.k === 'blood' ? BLOOD_ALL : t.label);
+const fixTests = v => { const t = splitMulti(v); if (!t.some(x => x === 'Blood (CBC)' || x === 'Blood chemistry')) return v;
+  const out = []; t.forEach(x => { const y = x === 'Blood (CBC)' || x === 'Blood chemistry' ? BLOOD_ALL : x; if (!out.includes(y)) out.push(y); }); return out.join('; '); };
+const testByLabel = l => l === BLOOD_ALL ? TESTS[0] : TESTS.find(t => t.label === l || t.short === l || t.k === l || (t.alias || []).includes(l));
 /** ถ้าไม่ได้ระบุ "ส่งตรวจ" → เดาจากชนิดตัวอย่าง */
 const SAMPLE2TEST = { 'Blood':['blood','bp'], 'Fecal':['feces'], 'Urine':['urine'], 'Skin/Hair':['derm'], 'Ear swab':['derm'], 'FNA':['cyto'], 'Vaginal swab':['vag'] };
 function requestedTests(c) {
-  let ks = splitMulti(c.tests).map(testByLabel).filter(Boolean).map(t => t.k);
+  let ks = splitMulti(c.tests).flatMap(l => l === BLOOD_ALL ? ['blood', 'chem'] : [testByLabel(l)].filter(Boolean).map(t => t.k));
   if (!ks.length) splitMulti(c.sampleTypes).forEach(s => (SAMPLE2TEST[s] || []).forEach(k => ks.push(k)));
   if (cattleBlood(c)) ks.push('bp', 'pcv');
   return [...new Set(ks)];
@@ -2135,7 +2143,7 @@ FIELDS.more = {
     { k:'group', label:'กลุ่มที่', type:'group', w:'full' },
     { k:'refNo', label:'เลขอ้างอิง AppSheet / Doctor Dog', type:'text' }, { k:'recorder', label:'ผู้บันทึก', type:'text', req:true, dl:'members' } ]
 };
-const testsField = g => ({ k:'tests', label: g === 'LA' ? 'ส่งตรวจอะไรบ้าง — โคที่เก็บ Blood ระบบใส่ Blood parasite + PCV / สี plasma ให้อัตโนมัติ' : 'ส่งตรวจอะไรบ้าง (เลือกได้หลายอย่าง)', type:'multi', opts: testsFor(g).map(t => t.label), req:true, w:'full' });
+const testsField = g => ({ k:'tests', label: g === 'LA' ? 'ส่งตรวจอะไรบ้าง — โคที่เก็บ Blood ระบบใส่ Blood parasite + PCV / สี plasma ให้อัตโนมัติ' : 'ส่งตรวจอะไรบ้าง (เลือกได้หลายอย่าง)', type:'multi', opts: testOpts(g), fix: fixTests, req:true, w:'full' });
 /** Signalment — บังคับกรอกตอนรับตัวอย่าง (ทำหมัน: เฉพาะสัตว์เล็ก) */
 const signalFields = g => [ { k:'sex', label:'เพศ', type:'chips', opts:['ผู้','เมีย'], req:true },
   ...(g === 'LA' ? [] : [{ k:'neutered', label:'ทำหมันแล้ว?', type:'chips', opts:['ใช่','ไม่ใช่'], req:true }]),
