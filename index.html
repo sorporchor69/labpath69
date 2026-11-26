@@ -1604,11 +1604,11 @@ function showCreated(el, rec, sent) {
  * ===================================================================== */
 /** ชนิดการตรวจ (แท็บ) — la:true = ใช้กับสัตว์ใหญ่ด้วย */
 const TESTS = [
-  { k:'blood', label:'Blood (CBC)', short:'Blood', la:true, set:'blood_setting' },
+  { k:'blood', label:'Blood (CBC)', short:'Blood', la:true, set:'blood_setting', alias:['Blood chemistry', 'Chemistry', 'chem', 'Blood (CBC + Chemistry)'] },
   { k:'bp', label:'Blood parasite', short:'Blood parasite', la:true, set:'bp_setting' },
   { k:'pcv', label:'PCV / สี plasma', short:'PCV/Plasma', la:true, laOnly:true, set:'pcv_setting', alias:['PCV / สี serum'] },
   { k:'feces', label:'Fecal exam', short:'Fecal', la:true, set:'fec_setting' },
-  { k:'chem', label:'Blood chemistry', short:'Chemistry', la:true, laOnly:true, set:'chem_setting' }, // สุนัข/แมว: ลงผลรวมในแท็บ Blood
+  // Blood chemistry ลงผลรวมในแท็บ Blood (ช่อง chem_* ใน SECTIONS.*.chem ยังใช้เก็บข้อมูล)
   { k:'cyto', label:'Cytology', short:'Cytology', la:true, set:'cyto_setting' },
   { k:'urine', label:'Urinalysis', short:'Urine', set:'ur_setting' },
   { k:'kit', label:'Test kit', short:'Test kit', set:'kit_setting' },
@@ -1631,14 +1631,13 @@ const BLOOD_ALL = 'Blood (CBC + Chemistry)';
 const testOpts = g => testsFor(g).filter(t => t.k !== 'chem').map(t => t.k === 'blood' ? BLOOD_ALL : t.label);
 const fixTests = v => { const t = splitMulti(v); if (!t.some(x => x === 'Blood (CBC)' || x === 'Blood chemistry')) return v;
   const out = []; t.forEach(x => { const y = x === 'Blood (CBC)' || x === 'Blood chemistry' ? BLOOD_ALL : x; if (!out.includes(y)) out.push(y); }); return out.join('; '); };
-const testByLabel = l => l === BLOOD_ALL ? TESTS[0] : TESTS.find(t => t.label === l || t.short === l || t.k === l || (t.alias || []).includes(l));
+const testByLabel = l => TESTS.find(t => t.label === l || t.short === l || t.k === l || (t.alias || []).includes(l));
 /** ถ้าไม่ได้ระบุ "ส่งตรวจ" → เดาจากชนิดตัวอย่าง */
 const SAMPLE2TEST = { 'Blood':['blood','bp'], 'Fecal':['feces'], 'Urine':['urine'], 'Skin/Hair':['derm'], 'Ear swab':['derm'], 'FNA':['cyto'], 'Vaginal swab':['vag'] };
 function requestedTests(c) {
-  let ks = splitMulti(c.tests).flatMap(l => l === BLOOD_ALL ? ['blood', 'chem'] : [testByLabel(l)].filter(Boolean).map(t => t.k));
+  let ks = splitMulti(c.tests).map(testByLabel).filter(Boolean).map(t => t.k);
   if (!ks.length) splitMulti(c.sampleTypes).forEach(s => (SAMPLE2TEST[s] || []).forEach(k => ks.push(k)));
   if (cattleBlood(c)) ks.push('bp', 'pcv');
-  if (c.animalGroup !== 'LA') ks = ks.map(k => k === 'chem' ? 'blood' : k);
   return [...new Set(ks)];
 }
 
@@ -1737,8 +1736,9 @@ const SECTIONS = {
   }
 };
 // สุนัข/แมว: ลงผล CBC + Blood chemistry ในแท็บ Blood เดียวกัน (ข้อมูลยังเก็บช่องเดิม chem_*)
-SECTIONS.SA.blood = [SECTIONS.SA.blood[0], { k:'_cbcHead', type:'head', label:'🩸 CBC — VetScan HM5 / นับเอง' }, ...SECTIONS.SA.blood.slice(1),
-  { k:'_chemHead', type:'head', label:'🧪 Blood chemistry — VetScan VS2' }, ...SECTIONS.SA.chem.filter(f => f.k !== 'chem_setting')];
+['SA', 'LA'].forEach(g => { const b = SECTIONS[g].blood;
+  SECTIONS[g].blood = [b[0], { k:'_cbcHead', type:'head', label: g === 'SA' ? '🩸 CBC — VetScan HM5 / นับเอง' : '🩸 CBC' }, ...b.slice(1),
+    { k:'_chemHead', type:'head', label: g === 'SA' ? '🧪 Blood chemistry — VetScan VS2' : '🧪 Blood chemistry' }, ...SECTIONS[g].chem.filter(f => f.k !== 'chem_setting')]; });
 const RES_SHEET = g => g === 'LA' ? 'LA_Results' : 'SA_Results';
 const secFields = (g, k) => (SECTIONS[g === 'LA' ? 'LA' : 'SA'][k] || []);
 
@@ -1792,7 +1792,7 @@ function summarize(g, sec, row, c) {
   switch (sec) {
     case 'blood': return [num('hct', 'Hct', '%', 'hct'), num('hgb', 'HGB', '', 'hgb'), num('tp', 'TP', '', 'tp'), num('wbc', 'WBC', '', 'wbc'), num('platelet', 'PLT', '', 'plt'),
       filled(r.sat) ? 'SAT ' + r.sat : '', first(r.cbcInterp || r.blood_interp)]
-      .concat(g === 'SA' ? [num('chem_alp', 'ALP', '', 'alp'), num('chem_alt', 'ALT', '', 'alt'), num('chem_bun', 'BUN', '', 'bun'), num('chem_crea', 'Crea', '', 'crea'), num('chem_glu', 'Glu', '', 'glu'), num('chem_tp', 'TP(chem)', '', 'tp')] : [])
+      .concat([num('chem_alp', 'ALP', '', 'alp'), num('chem_alt', 'ALT', '', 'alt'), num('chem_ast', 'AST', '', 'ast'), num('chem_ggt', 'GGT', '', 'ggt'), num('chem_bun', 'BUN', '', 'bun'), num('chem_crea', 'Crea', '', 'crea'), num('chem_glu', 'Glu', '', 'glu'), num('chem_tp', 'TP(chem)', '', 'tp')])
       .filter(Boolean).join(' · ');
     case 'chem': return [num('chem_bun', 'BUN', '', 'bun'), num('chem_crea', 'Crea', '', 'crea'), num('chem_alt', 'ALT', '', 'alt'), num('chem_ast', 'AST', '', 'ast'),
       num('chem_alp', 'ALP', '', 'alp'), num('chem_ggt', 'GGT', '', 'ggt'), num('chem_alb', 'Alb', '', 'alb'), num('chem_glu', 'Glu', '', 'glu'),
@@ -1823,7 +1823,7 @@ function summaryHTML(g, sec, row, c) {
 async function saveSection(c, sec, vals) {
   const sheet = RES_SHEET(c.animalGroup);
   const row = resultRow(c);
-  if (c.animalGroup !== 'LA' && sec === 'blood' && 'blood_setting' in vals) vals.chem_setting = SECTIONS.SA.chem.some(f => f.k !== 'chem_setting' && filled(vals[f.k])) ? vals.blood_setting : '';
+  if (sec === 'blood' && 'blood_setting' in vals) vals.chem_setting = SECTIONS[c.animalGroup === 'LA' ? 'LA' : 'SA'].chem.some(f => f.k !== 'chem_setting' && filled(vals[f.k])) ? vals.blood_setting : '';
   // โค: Hct (แท็บ Blood) = PCV (แท็บ PCV/Plasma) — กรอกที่ไหนก็ขึ้นทั้งสองที่ (เซิร์ฟเวอร์ทำซ้ำอีกชั้น)
   if (c.animalGroup === 'LA') {
     const was = k => String((row || {})[k] ?? '');
@@ -1844,7 +1844,7 @@ function sectionFormHTML(c, sec, row, ro) {
   const t = TESTS.find(x => x.k === sec);
   const hasDiff = fs.some(f => f.diff);
   return `<form id="secForm" novalidate data-case="${esc(c.id)}">
-    <div class="card"><h2>${esc(g === 'SA' && sec === 'blood' ? 'Blood — CBC + Blood chemistry' : t.label)} <span class="fl ${esc((row || {})[t.set] || '')}">${esc((row || {})[t.set] || '')}</span></h2>
+    <div class="card"><h2>${esc(sec === 'blood' ? 'Blood — CBC + Blood chemistry' : t.label)} <span class="fl ${esc((row || {})[t.set] || '')}">${esc((row || {})[t.set] || '')}</span></h2>
       ${ref && fs.some(f => f.ref) ? `<p class="small muted" style="margin-top:0">แสดงค่าอ้างอิงโดยประมาณของ${esc(c.species || 'โค')} — ค่านอกช่วงขึ้น ↑ ↓ สีเหลือง (ยังบันทึกได้)</p>` : ''}
       <fieldset ${ro ? 'disabled' : ''}>${formHTML(fs, row || {}, ro)}</fieldset>
       ${hasDiff ? '<div class="small" id="diffSum" style="margin-top:8px"></div>' : ''}
