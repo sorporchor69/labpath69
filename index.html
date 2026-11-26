@@ -889,7 +889,8 @@ const OCR_FIELDS = {
     ['eos_abs', /\bEOS\b(?!\s*%)/], ['bas_abs', /\bBAS\b(?!\s*%)/], ['rbc', /\bRBC\b/], ['hgb', /\bHGB\b/], ['hct', /\bHCT\b/],
     ['mcv', /\bMCV\b/], ['mch', /\bMCH\b(?!C)/], ['mchc', /\bMCHC\b/], ['rdw', /\bRDW\s*c\b/i], ['platelet', /\bPLT\b/], ['mpv', /\bMPV\b/]],
   chem_photos: [['chem_alp', /\bALP\b/], ['chem_alt', /\bALT\b/], ['chem_bun', /\bBUN\b/], ['chem_crea', /\bCREA?\b/], ['chem_glu', /\bGLU\b/],
-    ['chem_tp', /\bTP\b/], ['chem_alb', /\bALB\b/], ['chem_glob', /\bGLOB\b/]]
+    ['chem_tp', /\bTP\b/], ['chem_alb', /\bALB\b/], ['chem_glob', /\bGLOB\b/],
+    ['chem_ast', /\bAST\b/], ['chem_ggt', /\bGGT\b/], ['chem_ck', /\bCK\b/], ['chem_ca', /\bCA\b/], ['chem_phos', /\bPHOS\b/], ['chem_mg', /\bMG\b/]]
 };
 /** ข้อความ OCR → { ค่า: {k: ตัวเลข}, qc: {k: '0'..'3+'}, pid } — อ่านทีละบรรทัด: ชื่อค่า แล้วตัวเลขตัวแรกที่ตามมา */
 function parseVetscan(text, key) {
@@ -1711,16 +1712,33 @@ const SECTIONS = {
       { k:'vag_interp', label:'Interpretation', type:'chips', list:'vag_interp', w:'full' } ]
   },
   LA: {
+    // โค: เหมือนสุนัข/แมว — เรียงตามใบ VetScan HM5 · vs = แสดงเฉพาะเมื่อเลือก "VetScan HM5"
     blood: [ { k:'blood_setting', ...FL },
-      { k:'hct', label:'Hct (%)', type:'num', ref:'hct' }, { k:'tp', label:'TP (g/dL)', type:'num', ref:'tp' },
-      { k:'rbc', label:'RBC (×10⁶/µL)', type:'num', ref:'rbc' }, { k:'wbc', label:'WBC (×10³/µL)', type:'num', ref:'wbc' },
-      ...DIFF, { k:'poikilocyte', label:'Poikilocytes', type:'text' }, { k:'platelet', label:'Platelet (×10³/µL)', type:'num', ref:'plt' },
+      { k:'cbc_src', label:'ผล CBC มาจาก', type:'chips', opts:VS_SRC, w:'full' },
+      { k:'wbc', label:'WBC (×10³/µL)', type:'num', ref:'wbc' },
+      ...VS_ABS.map(([k, l, r]) => ({ k, label: l + ' (×10³/µL)', type:'num', ref:r, vs:true })),
+      ...['lym', 'mono', 'neu', 'eos', 'baso', 'band', 'blast'].map(k => DIFF.find(f => f.k === k)),
+      { k:'rbc', label:'RBC (×10⁶/µL)', type:'num', ref:'rbc' }, { k:'hgb', label:'HGB (g/dL)', type:'num', ref:'hgb', vs:true },
+      { k:'hct', label:'HCT (%) — ค่าเดียวกับ PCV ในแท็บ PCV/Plasma', type:'num', ref:'hct' }, { k:'mcv', label:'MCV (fL)', type:'num', ref:'mcv', vs:true },
+      { k:'mch', label:'MCH (pg)', type:'num', ref:'mch', vs:true }, { k:'mchc', label:'MCHC (g/dL)', type:'num', ref:'mchc', vs:true },
+      { k:'rdw', label:'RDWc (%)', type:'num', vs:true },
+      { k:'platelet', label:'PLT — Platelet (×10³/µL)', type:'num', ref:'plt' }, { k:'mpv', label:'MPV (fL)', type:'num', vs:true },
+      { k:'tp', label:'TP (g/dL) — refractometer', type:'num', ref:'tp' },
+      { k:'poikilocyte', label:'Poikilocytes', type:'text' },
+      { k:'cbc_photos', label:'รูปใบผล CBC — ถ่ายแล้วเว็บอ่านค่าให้อัตโนมัติ', type:'photos', w:'full', ocr:true },
       { k:'blood_interp', label:'Interpretation', type:'area', w:'full' } ],
+    // เรียงตามตัวอักษรแบบใบ VetScan VS2 (Large Animal Profile) — ค่าไหนไม่มีบนใบเว้นว่างได้
     chem: [ { k:'chem_setting', ...FL },
-      { k:'chem_bun', label:'BUN (mg/dL)', type:'num', ref:'bun' }, { k:'chem_crea', label:'Creatinine (mg/dL)', type:'num', ref:'crea' },
-      { k:'chem_ast', label:'AST (U/L)', type:'num', ref:'ast' }, { k:'chem_ggt', label:'GGT (U/L)', type:'num', ref:'ggt' },
-      { k:'chem_tp', label:'Total protein (g/dL)', type:'num', ref:'tp' }, { k:'chem_alb', label:'Albumin (g/dL)', type:'num', ref:'alb' },
-      { k:'chem_glob', label:'Globulin (g/dL)', type:'num', ref:'glob' }, { k:'chem_glu', label:'Glucose (mg/dL)', type:'num', ref:'glu' },
+      { k:'chem_alb', label:'ALB — Albumin (g/dL)', type:'num', ref:'alb' }, { k:'chem_alp', label:'ALP (U/L)', type:'num' },
+      { k:'chem_ast', label:'AST (U/L)', type:'num', ref:'ast' }, { k:'chem_bun', label:'BUN (mg/dL)', type:'num', ref:'bun' },
+      { k:'chem_ca', label:'CA — Calcium (mg/dL)', type:'num', ref:'ca' }, { k:'chem_ck', label:'CK (U/L)', type:'num', ref:'ck' },
+      { k:'chem_crea', label:'CRE — Creatinine (mg/dL)', type:'num', ref:'crea' }, { k:'chem_ggt', label:'GGT (U/L)', type:'num', ref:'ggt' },
+      { k:'chem_glob', label:'GLOB — Globulin (g/dL)', type:'num', ref:'glob' }, { k:'chem_glu', label:'GLU — Glucose (mg/dL)', type:'num', ref:'glu' },
+      { k:'chem_mg', label:'MG — Magnesium (mg/dL)', type:'num', ref:'mg' }, { k:'chem_phos', label:'PHOS — Phosphorus (mg/dL)', type:'num', ref:'phos' },
+      { k:'chem_tp', label:'TP — Total protein (g/dL) จากเครื่อง chemistry', type:'num', ref:'tp' },
+      { k:'chem_hem', label:'HEM (hemolysis)', type:'chips', opts:QC_IDX }, { k:'chem_lip', label:'LIP (lipemia)', type:'chips', opts:QC_IDX },
+      { k:'chem_ict', label:'ICT (icterus)', type:'chips', opts:QC_IDX },
+      { k:'chem_photos', label:'รูปใบผล chemistry — ถ่ายแล้วเว็บอ่านค่าให้อัตโนมัติ', type:'photos', w:'full', ocr:true },
       { k:'chem_other', label:'ค่าอื่น ๆ (เช่น Ca, P, Mg, Bilirubin)', type:'text', w:'full' },
       { k:'chem_interp', label:'Blood chemistry interpretation', type:'area', w:'full' } ],
     bp: [ { k:'bp_setting', ...FL }, { k:'bp_method', label:'Methods', type:'multi', list:'bp_method_LA', w:'full' },
@@ -1751,7 +1769,9 @@ const REF = {
     bun:[16,36], crea:[0.8,2.4], alt:[12,130], alp:[14,111], alb:[2.5,3.9], glob:[2.5,5.0], glu:[70,150],
     hgb:[8,15], mcv:[39,55], mch:[12.5,17.5], mchc:[30,36], lyma:[1.5,7.0], mona:[0,0.85], neua:[2.5,12.5], eosa:[0,1.5], basa:[0,0.1] },
   'โค':   { hct:[24,46], tp:[7.0,8.5], rbc:[5,10], wbc:[4,12], plt:[100,800],
-    bun:[6,27], crea:[1.0,2.0], ast:[60,125], ggt:[15,40], alb:[2.7,3.8], glob:[3.0,4.8], glu:[45,75] }
+    bun:[6,27], crea:[1.0,2.0], ast:[60,125], ggt:[15,40], alb:[2.7,3.8], glob:[3.0,4.8], glu:[45,75],
+    hgb:[8,15], mcv:[40,60], mch:[11,17], mchc:[30,36], lyma:[2.5,7.5], mona:[0.03,0.84], neua:[0.6,4.0], eosa:[0,2.4], basa:[0,0.2],
+    ca:[8.4,11.0], phos:[4.3,7.8], mg:[1.8,2.4], ck:[50,350] }
 };
 const refFor = c => REF[c.species] || (c.animalGroup === 'LA' ? REF['โค'] : null);
 const HARD = { hct:[0,80], tp:[0,15], ur_usg:[1.000,1.080], hgb:[0,30], mchc:[0,60], mcv:[0,200], mch:[0,80], wbc:[0,500], rbc:[0,25] }; // เกินช่วงนี้ = เป็นไปไม่ได้ → ห้ามบันทึก
@@ -1859,7 +1879,7 @@ function vetscanLive(form, target) {
   const box = $('[data-chips="cbc_src"]', form); if (!box) return;
   const src = ($('input:checked', box) || {}).value || '';
   const vs = src !== VS_SRC[1];
-  SECTIONS.SA.blood.filter(f => f.vs).forEach(f => { const el = $(`.fld[data-k="${f.k}"]`, form); if (el) el.style.display = vs ? '' : 'none'; });
+  [...VS_ABS.map(a => ({ k: a[0] })), ...['hgb', 'mcv', 'mch', 'mchc', 'rdw', 'mpv'].map(k => ({ k }))].forEach(f => { const el = $(`.fld[data-k="${f.k}"]`, form); if (el) el.style.display = vs ? '' : 'none'; });
   const val = k => { const el = $(`[name="${k}"]`, form); const v = el ? el.value.trim() : ''; return v === '' || !isFinite(Number(v)) ? null : Number(v); };
   // VetScan: ช่อง % คำนวณจากค่า ×10³/µL เอง (ล็อกไว้ ไม่ต้องกรอกซ้ำ) · Bands/Blasts เครื่องไม่นับ → ซ่อนถ้าว่าง
   const auto = vs && !!src;
